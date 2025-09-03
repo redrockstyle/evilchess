@@ -1,0 +1,21 @@
+[Event "rated bullet game"]
+[Site "https://example/some3"]
+[Date "2024.08.15"]
+[White "player98"]
+[Black "player92"]
+[Result "1-0"]
+[UTCDate "2024.08.15"]
+[UTCTime "07:18:30"]
+[WhiteElo "2279"]
+[BlackElo "2270"]
+[WhiteRatingDiff "+6"]
+[BlackRatingDiff "-6"]
+[Variant "Standard"]
+[TimeControl "60+0"]
+[ECO "A00"]
+[Opening "Hungarian Opening: Reversed Alekhine"]
+[Termination "Normal"]
+
+1. Nf3 { [%clk 0:01:00] } 1... e5 { [%clk 0:01:00] } 2. g3 { [%clk 0:01:00] } { A00 Hungarian Opening: Reversed Alekhine } 2... Nc6 { [%clk 0:01:00] } 3. d3 { [%clk 0:00:58] } 3... Nf6 { [%clk 0:01:00] } 4. Bg2 { [%clk 0:00:58] } 4... d5 { [%clk 0:00:59] } 5. O-O { [%clk 0:00:57] } 5... Bd6 { [%clk 0:00:59] } 6. Nbd2 { [%clk 0:00:57] } 6... Qe7 { [%clk 0:00:59] } 7. e4 { [%clk 0:00:56] } 7... d4 { [%clk 0:00:59] } 8. c4 { [%clk 0:00:55] } 8... dxc3 { [%clk 0:00:57] } 9. bxc3 { [%clk 0:00:55] } 9... Bg4 { [%clk 0:00:56] } 10. Qc2 { [%clk 0:00:54] } 10... O-O-O { [%clk 0:00:55] } 11. a4 { [%clk 0:00:52] } 11... Bc5 { [%clk 0:00:54] } 12. h3 { [%clk 0:00:51] } 12... Bh5 { [%clk 0:00:53] } 13. Nc4 { [%clk 0:00:48] } 13... a6 { [%clk 0:00:51] } 14. Be3 { [%clk 0:00:47] } 14... Bxe3 { [%clk 0:00:49] } 15. Nxe3 { [%clk 0:00:47] } 15... h6 { [%clk 0:00:46] } 16. Rfb1 { [%clk 0:00:38] } 16... g5 { [%clk 0:00:44] } 17. Nh2 { [%clk 0:00:36] } 17... g4 { [%clk 0:00:41] } 18. h4 { [%clk 0:00:33] } 18... Nd7 { [%clk 0:00:39] } 19. Nhf1 { [%clk 0:00:32] } 19... Nc5 { [%clk 0:00:38] } 20. Nd5 { [%clk 0:00:31] } 20... Qd6 { [%clk 0:00:36] } 21. Nfe3 { [%clk 0:00:30] } 21... Rhf8 { [%clk 0:00:33] } 22. Nf5 { [%clk 0:00:29] } 22... Qd7 { [%clk 0:00:32] } 23. Qb2 { [%clk 0:00:27] } 23... b6 { [%clk 0:00:27] } 24. d4 { [%clk 0:00:25] } 24... Ne6 { [%clk 0:00:23] } 25. Bf1 { [%clk 0:00:20] } 25... exd4 { [%clk 0:00:21] } 26. Bxa6+ { [%clk 0:00:19] } 26... Kb8 { [%clk 0:00:19] } 27. a5 { [%clk 0:00:18] } 27... Nxa5 { [%clk 0:00:17] } 28. Rxa5 { [%clk 0:00:17] } 28... Nc5 { [%clk 0:00:15] } 29. Rxc5 { [%clk 0:00:16] } 29... Bg6 { [%clk 0:00:11] } 30. Rxc7 { [%clk 0:00:15] } 30... Qe6 { [%clk 0:00:08] } 31. Nfe7 { [%clk 0:00:13] } 31... Qxe4 { [%clk 0:00:05] } 32. Nc6+ { [%clk 0:00:11] } 32... Ka8 { [%clk 0:00:05] } 33. Ra7# { [%clk 0:00:11] } { White wins by checkmate. } 1-0
+
+

@@ -1,0 +1,21 @@
+[Event "rated blitz game"]
+[Site "https://example.com/some53"]
+[Date "2022.09.07"]
+[White "player94"]
+[Black "player98"]
+[Result "0-1"]
+[UTCDate "2022.09.07"]
+[UTCTime "08:01:34"]
+[WhiteElo "2256"]
+[BlackElo "2321"]
+[WhiteRatingDiff "-5"]
+[BlackRatingDiff "+5"]
+[Variant "Standard"]
+[TimeControl "180+0"]
+[ECO "B41"]
+[Opening "Sicilian Defense: Kan Variation"]
+[Termination "Normal"]
+
+1. e4 c5 2. Nf3 e6 3. d4 cxd4 4. Nxd4 a6 5. a4 Nf6 6. Nc3 Qc7 7. Bd3 Be7 8. O-O b6 9. Re1 d6 10. Bg5 Bb7 11. Bh4 Nbd7 12. Bg3 g5 13. Kh1 h5 14. f4 h4 15. Bf2 gxf4 16. Qf3 h3 17. Re2 hxg2+ 18. Qxg2 Ne5 19. Rae1 O-O-O 20. a5 Rdg8 21. axb6 Rxg2 22. bxc7 Rhxh2# 0-1
+
+

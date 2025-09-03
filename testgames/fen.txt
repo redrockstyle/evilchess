@@ -1,0 +1,8 @@
+CASTLING
+rnbqk2r/ppppppbp/5np1/8/2P5/2N3P1/PP1PPPBP/R1BQK1NR b KQkq - 2 4
+
+UNREAL:
+rnbqkbnr/PPPPPPPP/8/3pP3/4R3/8/8/2N1K1N1 w KQkq d6 0 
+
+CLASSIC:
+rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1

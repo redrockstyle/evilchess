@@ -1,0 +1,21 @@
+[Event "rated bullet game"]
+[Site "https://example.com/some4"]
+[Date "2022.11.11"]
+[White "player98"]
+[Black "player93"]
+[Result "1-0"]
+[UTCDate "2022.11.11"]
+[UTCTime "11:09:32"]
+[WhiteElo "2392"]
+[BlackElo "2223"]
+[WhiteRatingDiff "+3"]
+[BlackRatingDiff "-3"]
+[Variant "Standard"]
+[TimeControl "60+0"]
+[ECO "A03"]
+[Opening "Bird Opening: Dutch Variation"]
+[Termination "Normal"]
+
+1. f4 { [%clk 0:01:00] } 1... d5 { [%clk 0:01:00] } { A03 Bird Opening: Dutch Variation } 2. Nf3 { [%clk 0:00:59] } 2... c6 { [%clk 0:01:00] } 3. d3 { [%clk 0:00:59] } 3... Nf6 { [%clk 0:00:59] } 4. Nbd2 { [%clk 0:00:58] } 4... e6 { [%clk 0:00:59] } 5. e4 { [%clk 0:00:58] } 5... dxe4 { [%clk 0:00:57] } 6. dxe4 { [%clk 0:00:58] } 6... Be7 { [%clk 0:00:56] } 7. Be2 { [%clk 0:00:56] } 7... O-O { [%clk 0:00:56] } 8. O-O { [%clk 0:00:56] } 8... Na6 { [%clk 0:00:55] } 9. Nc4 { [%clk 0:00:55] } 9... Nc7 { [%clk 0:00:54] } 10. c3 { [%clk 0:00:54] } 10... Bc5+ { [%clk 0:00:54] } 11. Be3 { [%clk 0:00:53] } 11... Bxe3+ { [%clk 0:00:53] } 12. Nxe3 { [%clk 0:00:52] } 12... Qe7 { [%clk 0:00:52] } 13. Qb3 { [%clk 0:00:51] } 13... Nb5 { [%clk 0:00:51] } 14. e5 { [%clk 0:00:50] } 14... Nd5 { [%clk 0:00:50] } 15. Nd4 { [%clk 0:00:49] } 15... Nxd4 { [%clk 0:00:49] } 16. cxd4 { [%clk 0:00:49] } 16... Nxe3 { [%clk 0:00:49] } 17. Qxe3 { [%clk 0:00:48] } 17... Rd8 { [%clk 0:00:47] } 18. g4 { [%clk 0:00:47] } 18... b6 { [%clk 0:00:47] } 19. Bf3 { [%clk 0:00:45] } 19... Bb7 { [%clk 0:00:46] } 20. f5 { [%clk 0:00:43] } 20... Rac8 { [%clk 0:00:45] } 21. Be4 { [%clk 0:00:41] } 21... c5 { [%clk 0:00:45] } 22. f6 { [%clk 0:00:40] } 22... Qf8 { [%clk 0:00:44] } 23. Bd3 { [%clk 0:00:36] } 23... cxd4 { [%clk 0:00:39] } 24. Qh3 { [%clk 0:00:29] } 24... g6 { [%clk 0:00:38] } 25. Qg3 { [%clk 0:00:25] } 25... Rc5 { [%clk 0:00:34] } 26. h4 { [%clk 0:00:23] } 26... Ba8 { [%clk 0:00:31] } 27. h5 { [%clk 0:00:22] } 27... Rdd5 { [%clk 0:00:30] } 28. Rae1 { [%clk 0:00:21] } 28... Qb8 { [%clk 0:00:27] } 29. hxg6 { [%clk 0:00:20] } 29... hxg6 { [%clk 0:00:24] } 30. Qh4 { [%clk 0:00:12] } 30... Rxe5 { [%clk 0:00:21] } 31. Bxg6 { [%clk 0:00:11] } 31... fxg6 { [%clk 0:00:15] } 32. f7+ { [%clk 0:00:11] } 32... Kg7 { [%clk 0:00:09] } 33. Qf6+ { [%clk 0:00:10] } 33... Kh7 { [%clk 0:00:08] } 34. f8=N+ { [%clk 0:00:08] } 34... Kg8 { [%clk 0:00:07] } 35. Qxg6+ { [%clk 0:00:06] } 35... Kh8 { [%clk 0:00:06] } 36. Qh7# { [%clk 0:00:06] } { White wins by checkmate. } 1-0
+
+
