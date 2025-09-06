@@ -5,10 +5,12 @@ import (
 	"evilchess/src"
 	"evilchess/src/base"
 	clic "evilchess/ui/cli"
+	"evilchess/ui/gui"
 	"fmt"
 	"os"
 	"runtime"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/sys/windows"
 )
@@ -122,10 +124,20 @@ func CLIProcessing(gb *src.GameBuilder) {
 	PrintMailbox(gb.CurrentBoard())
 }
 
+func RunGUI(fen string) error {
+	g := gui.NewGameFromFEN(fen)
+	app := gui.NewApp(g)
+
+	// ebiten.SetWindowSize(800, 800)
+	ebiten.SetWindowTitle("EvilChess")
+
+	return ebiten.RunGame(app)
+}
+
 func main() {
 	if err := (&cli.Command{
 		Name:  "evilchess",
-		Usage: "mini chess",
+		Usage: "mini chess game",
 		Commands: []*cli.Command{
 			{
 				Name: "cli",
@@ -172,6 +184,17 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name: "gui",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					RunGUI(base.FEN_START_GAME)
+					return nil
+				},
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			RunGUI(base.FEN_START_GAME)
+			return nil
 		},
 	}).Run(context.Background(), os.Args); err != nil {
 		fmt.Println(err)

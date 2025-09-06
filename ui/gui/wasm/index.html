@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>EvilChess WASM</title>
+  <style>
+    body { margin: 0; background: #eee; display:flex; align-items:center; justify-content:center; height:100vh; }
+    #ebiten { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <script src="wasm_exec.js"></script>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    }).catch(err => {
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
