@@ -3,290 +3,585 @@ package gui
 import (
 	"fmt"
 	"image/color"
+	"io"
+	"log"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font/basicfont"
+
+	"evilchess/src/base"
+	"evilchess/src/logic/convert/convfen"
 )
+
+// --- UI constants ---
+const (
+	SquareSize  = 64
+	BoardMargin = 12
+	RightPanelW = 320
+	HeaderH     = 60
+	BottomH     = 120
+	WindowPadW  = 40
+	WindowPadH  = 40
+	AppBgR      = 90  //0xf0
+	AppBgG      = 120 //0xf0
+	AppBgB      = 130 //0xf0
+)
+
+type screenMode int
 
 const (
-	SquareSize = 72
-	BoardSize  = 8
-	Margin     = 8
+	ScreenMenu screenMode = iota
+	ScreenPlay
+	ScreenEditor
 )
 
-type GameState struct {
-	board        [64]rune   // piece runes: 'P','N','B','R','Q','K' (upper white), lowercase black, '.' empty
-	history      [][64]rune // snapshots for undo
-	moves        []string   // simple move notation list (uCI-like: e2-e4)
-	headers      map[string]string
-	selected     int // -1 = none, else index 0..63
-	lastFrom     int
-	lastTo       int
-	windowWidth  int
-	windowHeight int
+type Builder interface {
+	CreateClassic()
+	CreateFromFEN(fen string) (base.GameStatus, error)
+	MoveSAN(san string) base.GameStatus
+	Move(mv base.Move) base.GameStatus
+	Undo() base.GameStatus
+	Redo() base.GameStatus
+	CurrentBoard() base.Mailbox
+	FEN() string
+	PGN(w io.Writer) error
+	PGNBody() string
+	Status() base.GameStatus
 }
 
-func NewGameFromFEN(fen string) *GameState {
-	g := &GameState{
-		selected: -1,
-		headers:  map[string]string{"Event": "Demo", "White": "White", "Black": "Black"},
+type GUIProcessing struct {
+	builder Builder
+
+	mu sync.Mutex
+
+	mode screenMode
+
+	// play/editor model
+	selected int // selected square index or -1
+	lastFrom int
+	lastTo   int
+
+	// editor state
+	editorBoard     [64]base.Piece
+	selectedPalette base.Piece
+	editorSideWhite bool
+	editorCastling  base.StatusCasting
+
+	// visual settings
+	winW int
+	winH int
+	// language toggle
+	langEN bool
+
+	// time
+	startTime time.Time
+
+	// piece images
+	img map[base.Piece]*ebiten.Image
+}
+
+func NewGUI(b Builder) *GUIProcessing {
+	files := []string{
+		"assets/wking60.png",   // 0
+		"assets/bking60.png",   // 1
+		"assets/wqueen60.png",  // 2
+		"assets/bqueen60.png",  // 3
+		"assets/wbishop60.png", // 4
+		"assets/bbishop60.png", // 5
+		"assets/wknight60.png", // 6
+		"assets/bknight60.png", // 7
+		"assets/wrook60.png",   // 8
+		"assets/brook60.png",   // 9
+		"assets/wpawn60.png",   // 10
+		"assets/bpawn60.png",   // 11
 	}
-	// default empty
-	for i := range g.board {
-		g.board[i] = '.'
+	keys := []base.Piece{
+		base.WKing,
+		base.BKing,
+		base.WQueen,
+		base.BQueen,
+		base.WBishop,
+		base.BBishop,
+		base.WKnight,
+		base.BKnight,
+		base.WRook,
+		base.BRook,
+		base.WPawn,
+		base.BPawn,
+		base.InvalidPiece,
 	}
-	// parse piece placement only (first field)
-	fields := strings.Fields(fen)
-	if len(fields) == 0 { // fallback to standard start
-		fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-		fields = strings.Fields(fen)
+	figureImages := make(map[base.Piece]*ebiten.Image)
+	for i := 0; i < 12; i++ {
+		img, _, err := ebitenutil.NewImageFromFile(files[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		figureImages[keys[i]] = img
 	}
-	ranks := strings.Split(fields[0], "/")
-	if len(ranks) != 8 {
-		// invalid, fill empty
-		return g
+	return &GUIProcessing{
+		builder:         b,
+		mode:            ScreenMenu,
+		selected:        -1,
+		lastFrom:        -1,
+		lastTo:          -1,
+		selectedPalette: base.InvalidPiece,
+		editorSideWhite: true,
+		editorCastling:  base.StatusCasting{WK: true, WQ: true, BK: true, BQ: true},
+		langEN:          false,
+		startTime:       time.Now(),
+		img:             figureImages,
 	}
-	for r := 0; r < 8; r++ {
-		row := ranks[r]
-		file := 0
-		for _, ch := range row {
-			if ch >= '1' && ch <= '8' {
-				// empty squares
-				empties := int(ch - '0')
-				for k := 0; k < empties; k++ {
-					idx := r*8 + file
-					g.board[idx] = '.'
-					file++
-				}
-			} else {
-				idx := r*8 + file
-				g.board[idx] = ch
-				file++
-			}
+}
+
+// Run starts Ebiten window (blocking)
+func (g *GUIProcessing) Run() error {
+	// layout
+	boardW := SquareSize*8 + BoardMargin*2
+	winW := boardW + RightPanelW + WindowPadW
+	winH := SquareSize*8 + HeaderH + BottomH + WindowPadH
+	g.winW = winW
+	g.winH = winH
+
+	ebiten.SetWindowSize(winW, winH)
+	ebiten.SetWindowTitle("EvilChess GUI (Ebiten)")
+
+	return ebiten.RunGame(g)
+}
+
+// --- Ebiten game methods ---
+
+func (g *GUIProcessing) Update() error {
+	// input handling: clicks and keys
+	// we'll emulate simple "just pressed" detection with internal state
+	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		// Escape returns user to menu from other screens
+		if g.mode != ScreenMenu {
+			g.mode = ScreenMenu
 		}
 	}
-	// push initial snapshot
-	g.pushSnapshot()
-	return g
-}
 
-func (g *GameState) pushSnapshot() {
-	var snap [64]rune
-	copy(snap[:], g.board[:])
-	g.history = append(g.history, snap)
-}
-
-func (g *GameState) undo() {
-	if len(g.history) <= 1 {
-		return
-	}
-	// drop last snapshot and restore previous
-	g.history = g.history[:len(g.history)-1]
-	last := g.history[len(g.history)-1]
-	copy(g.board[:], last[:])
-	// pop move
-	if len(g.moves) > 0 {
-		g.moves = g.moves[:len(g.moves)-1]
-	}
-	// reset lastFrom/To
-	g.lastFrom = -1
-	g.lastTo = -1
-	g.selected = -1
-}
-
-func (g *GameState) algebraicFromIndex(idx int) string {
-	if idx < 0 || idx >= 64 {
-		return "??"
-	}
-	file := idx % 8
-	rank := 8 - (idx / 8) // ranks from 8 to 1 (FEN uses rank 8 at top)
-	return fmt.Sprintf("%c%d", 'a'+file, rank)
-}
-
-func (g *GameState) handleClick(x, y int) {
-	boardLeft := Margin
-	boardTop := Margin + 60 // leave space for headers at top
-	bx := x - boardLeft
-	by := y - boardTop
-	if bx < 0 || by < 0 {
-		return
-	}
-	col := bx / SquareSize
-	row := by / SquareSize
-	if col < 0 || col >= 8 || row < 0 || row >= 8 {
-		return
-	}
-	idx := row*8 + col
-	// if nothing selected and clicked a piece, select
-	if g.selected == -1 {
-		if g.board[idx] != '.' {
-			g.selected = idx
-		}
-		return
-	}
-	// if selected and clicked same square -> deselect
-	if g.selected == idx {
-		g.selected = -1
-		return
-	}
-	// perform move (no validation)
-	g.lastFrom = g.selected
-	g.lastTo = idx
-	g.board[idx] = g.board[g.selected]
-	g.board[g.selected] = '.'
-	// add move string (simple uci-like)
-	mv := fmt.Sprintf("%s-%s", g.algebraicFromIndex(g.lastFrom), g.algebraicFromIndex(g.lastTo))
-	g.moves = append(g.moves, mv)
-	g.pushSnapshot()
-	g.selected = -1
-}
-
-type EbitenApp struct {
-	game *GameState
-}
-
-func NewApp(g *GameState) *EbitenApp {
-	return &EbitenApp{game: g}
-}
-
-func (a *EbitenApp) Update() error {
-	// handle mouse clicks
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		_, _ = ebiten.CursorPosition()
-		// to avoid rapid multiple clicks, check left-button just-pressed: simple edge detector via frame count would be better,
-		// but for demo we'll react to mouse release instead. So do nothing here.
-	}
-	// key handling: undo with U
-	if ebiten.IsKeyPressed(ebiten.KeyU) {
-		// naive debounce: only trigger once per key press would be better
-		a.game.undo()
-	}
-	// handle mouse release: detect button just released by checking mouse button state and last frame - simpler: check just previous position?
-	// For simplicity, we handle clicks via ebitenutil.IsMouseButton just-pressed style:
-	// ebiten does not have IsMouseButtonJustPressed; we emulate it by using InputChars? keep simple: use ebiten.IsMouseButtonPressed and track previous state
+	// Play/Editor interactions handled in Draw via mouse events (edge detection)
 	return nil
 }
 
-var prevMouseDown = false
-
-func (a *EbitenApp) Layout(outsideWidth, outsideHeight int) (int, int) {
-	// total width = board + right panel
-	w := Margin*2 + SquareSize*BoardSize + 320
-	h := Margin*2 + SquareSize*BoardSize + 80
-	a.game.windowWidth = w
-	a.game.windowHeight = h
-	return w, h
+func (g *GUIProcessing) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	return g.winW, g.winH
 }
 
-func (a *EbitenApp) Draw(screen *ebiten.Image) {
-	// clear bg
-	screen.Fill(color.RGBA{0xf0, 0xf0, 0xf0, 0xff})
+// func lerpColor(c1, c2 color.RGBA, t float64) color.RGBA {
+// 	r := uint8(float64(c1.R)*(1-t) + float64(c2.R)*t)
+// 	g := uint8(float64(c1.G)*(1-t) + float64(c2.G)*t)
+// 	b := uint8(float64(c1.B)*(1-t) + float64(c2.B)*t)
+// 	return color.RGBA{r, g, b, 255}
+// }
 
-	boardLeft := Margin
-	boardTop := Margin + 60
+// Draw decides which screen to draw
+func (g *GUIProcessing) Draw(screen *ebiten.Image) {
+	// colors := []color.RGBA{
+	// 	{0, 0, 64, 255},  // темно-синий (чуть приглушенный)
+	// 	{0, 64, 0, 255},  // темно-зеленый
+	// 	{64, 64, 0, 255}, // темно-желтый
+	// }
+	// elapsed := time.Since(g.startTime).Seconds()
+	// duration := 3.0
+	// totalColors := len(colors)
 
-	// draw headers (PGN headers) at top
-	hx := boardLeft
-	hy := Margin
-	text.Draw(screen, fmt.Sprintf("Event: %s", a.game.headers["Event"]), basicfont.Face7x13, hx, hy+12, color.Black)
-	text.Draw(screen, fmt.Sprintf("White: %s", a.game.headers["White"]), basicfont.Face7x13, hx+220, hy+12, color.Black)
-	text.Draw(screen, fmt.Sprintf("Black: %s", a.game.headers["Black"]), basicfont.Face7x13, hx+420, hy+12, color.Black)
+	// // Плавный цикл: двунаправленный переход 0->1->0
+	// pos := math.Mod(elapsed/duration, float64(totalColors))
+	// index1 := int(math.Floor(pos)) % totalColors
+	// index2 := (index1 + 1) % totalColors
 
-	// draw board squares
+	// // Вычисляем значение t для плавного нарастания и затухания (когда pos дробный расширяется от 0 до 1 и обратно)
+	// fract := pos - math.Floor(pos)
+	// t := 0.0
+	// if fract < 0.5 {
+	// 	t = fract * 2 // нарастание от 0 до 1
+	// } else {
+	// 	t = (1 - fract) * 2 // затухание от 1 до 0
+	// }
+
+	// c := lerpColor(colors[index1], colors[index2], t)
+
+	// screen.Fill(c)
+	// background
+	// screen.Fill(color.RGBA{AppBgR, AppBgG, AppBgB, 0xff})
+	screen.Fill(color.RGBA{135, 206, 250, 255}) // фон
+
+	switch g.mode {
+	case ScreenMenu:
+		g.drawMenu(screen)
+	case ScreenPlay:
+		g.drawPlay(screen)
+	case ScreenEditor:
+		g.drawEditor(screen)
+	}
+}
+
+// --- UI drawing helpers ---
+
+// drawMenu shows vertical buttons in center
+func (g *GUIProcessing) drawMenu(screen *ebiten.Image) {
+	cx := g.winW / 2
+	cy := g.winH / 2
+	btnW := 300
+	btnH := 48
+	sp := 16
+	btns := []string{"Play", "Board Editor", "Language: RU", "Exit"}
+	for i, b := range btns {
+		x := cx - btnW/2
+		y := cy - (len(btns)*(btnH+sp))/2 + i*(btnH+sp)
+		// background rect
+		ebitenutil.DrawRect(screen, float64(x), float64(y), float64(btnW), float64(btnH), color.RGBA{0x22, 0x88, 0xcc, 0xff})
+		// label
+		text.Draw(screen, b, basicfont.Face7x13, x+16, y+btnH/2+6, color.White)
+		// mouse handling: detect click
+		if mouseInRect(x, y, btnW, btnH) && mouseJustClicked() {
+			switch i {
+			case 0: // Play
+				g.builder.CreateClassic()
+				g.enterPlayFromBuilder()
+			case 1: // Board Editor
+				g.mode = ScreenEditor
+				g.initEditorEmpty()
+			case 2: // Language toggle
+				g.langEN = !g.langEN
+				// update label quickly (we simply flip text)
+				if g.langEN {
+					btns[2] = "Language: EN"
+				} else {
+					btns[2] = "Language: RU"
+				}
+			case 3: // Exit
+				return
+			}
+		}
+	}
+}
+
+// enterPlayFromBuilder initializes play state and switches to play screen
+func (g *GUIProcessing) enterPlayFromBuilder() {
+	// reset selection and read builder board
+	g.selected = -1
+	g.lastFrom = -1
+	g.lastTo = -1
+	g.mode = ScreenPlay
+}
+
+// drawPlay renders board (from builder.CurrentBoard()) and UI
+func (g *GUIProcessing) drawPlay(screen *ebiten.Image) {
+	boardLeft := BoardMargin
+	boardTop := HeaderH
+
+	// draw headers area
+	text.Draw(screen, fmt.Sprintf("Position FEN: %s", g.builder.FEN()), basicfont.Face7x13, boardLeft, 20, color.Black)
+	text.Draw(screen, fmt.Sprintf("Status: %s", g.builder.Status().String()), basicfont.Face7x13, boardLeft, 40, color.Black)
+
+	// render board squares
+	mail := g.builder.CurrentBoard()
 	for r := 0; r < 8; r++ {
 		for c := 0; c < 8; c++ {
 			x := boardLeft + c*SquareSize
 			y := boardTop + r*SquareSize
+
+			// переворачиваем индекс строк
+			boardRow := 7 - r
+			idx := boardRow*8 + c
+
 			light := ((r + c) % 2) == 0
-			var sqColor color.RGBA
+			var sq color.RGBA
 			if light {
-				sqColor = color.RGBA{0xee, 0xdd, 0xc8, 0xff}
+				sq = color.RGBA{0xee, 0xdd, 0xc8, 0xff}
 			} else {
-				sqColor = color.RGBA{0x99, 0x77, 0x55, 0xff}
+				sq = color.RGBA{0x99, 0x77, 0x55, 0xff}
 			}
-			// highlight last move background
-			idx := r*8 + c
-			if idx == a.game.lastFrom || idx == a.game.lastTo {
-				// overlay highlight color
-				// blend simple: use a different color
-				sqColor = color.RGBA{0xa8, 0xe6, 0xa8, 0xff}
+			if idx == g.lastFrom || idx == g.lastTo {
+				sq = color.RGBA{0xa8, 0xe6, 0xa8, 0xff}
 			}
-			ebitenutil.DrawRect(screen, float64(x), float64(y), SquareSize, SquareSize, sqColor)
+			ebitenutil.DrawRect(screen, float64(x), float64(y), SquareSize, SquareSize, sq)
 
-			// selection border
-			if a.game.selected == idx {
-				ebitenutil.DrawRect(screen, float64(x), float64(y), SquareSize, 4, color.RGBA{0xff, 0xd7, 0, 0xff})              // top
-				ebitenutil.DrawRect(screen, float64(x), float64(y+SquareSize-4), SquareSize, 4, color.RGBA{0xff, 0xd7, 0, 0xff}) // bottom
-				ebitenutil.DrawRect(screen, float64(x), float64(y), 4, SquareSize, color.RGBA{0xff, 0xd7, 0, 0xff})              // left
-				ebitenutil.DrawRect(screen, float64(x+SquareSize-4), float64(y), 4, SquareSize, color.RGBA{0xff, 0xd7, 0, 0xff}) // right
+			if g.selected == idx {
+				ebitenutil.DrawRect(screen, float64(x), float64(y), SquareSize, 4, color.RGBA{0xff, 0xd7, 0, 0xff})
 			}
-			// draw coordinate label (bottom-left of square)
-			label := fmt.Sprintf("%c%d", 'a'+c, 8-r)
-			text.Draw(screen, label, basicfont.Face7x13, x+4, y+SquareSize-4, color.RGBA{0x22, 0x22, 0x22, 0x66})
 
-			// draw piece
-			p := a.game.board[idx]
-			if p != '.' {
-				// center text
-				var col color.Color = color.Black
-				if p >= 'A' && p <= 'Z' {
-					col = color.White
-					// draw dark outline circle for white pieces
-					ebitenutil.DrawRect(screen, float64(x+8), float64(y+8), SquareSize-16, SquareSize-16, color.RGBA{0x33, 0x33, 0x33, 0x60})
+			p := mail[idx]
+			if p != base.InvalidPiece && p != base.EmptyPiece {
+				img := g.img[p]
+				if img != nil {
+					op := &ebiten.DrawImageOptions{}
+					px := x + (SquareSize-img.Bounds().Dx())/2
+					py := y + (SquareSize-img.Bounds().Dy())/2
+					op.GeoM.Translate(float64(px), float64(py))
+					screen.DrawImage(img, op)
+				}
+			}
+		}
+	}
+
+	// handle click: convert mouse to square and perform move logic
+	if mouseJustClicked() {
+		mx, my := ebiten.CursorPosition()
+		if mx >= boardLeft && mx < boardLeft+8*SquareSize && my >= boardTop && my < boardTop+8*SquareSize {
+			c := (mx - boardLeft) / SquareSize
+			r := (my - boardTop) / SquareSize
+			boardRow := 7 - r // инверсия по вертикали
+			idx := boardRow*8 + c
+			// selection/move
+			if g.selected == -1 {
+				// select if there is a piece at idx
+				p := g.builder.CurrentBoard()[idx]
+				if p != base.EmptyPiece && p != base.InvalidPiece {
+					g.selected = idx
+				}
+			} else {
+				if g.selected == idx {
+					g.selected = -1
 				} else {
-					col = color.Black
+
+					mxd22 := g.builder.CurrentBoard()
+					pc := base.GetPieceAt(&mxd22, base.ConvIndexToPoint(g.selected))
+					mv := base.Move{
+						From:  base.ConvIndexToPoint(g.selected),
+						To:    base.ConvIndexToPoint(idx),
+						Piece: pc,
+					}
+					if status := g.builder.Move(mv); status == base.InvalidGame {
+						log.Printf("invalid move from %d to %d", g.selected, idx)
+					}
+
+					g.lastFrom = g.selected
+					g.lastTo = idx
+					g.selected = -1
 				}
-				// display letter (map piece to letter)
-				letter := rune(' ')
-				switch p {
-				case 'P', 'p':
-					letter = 'P'
-				case 'N', 'n':
-					letter = 'N'
-				case 'B', 'b':
-					letter = 'B'
-				case 'R', 'r':
-					letter = 'R'
-				case 'Q', 'q':
-					letter = 'Q'
-				case 'K', 'k':
-					letter = 'K'
-				default:
-					letter = '?'
+			}
+		}
+
+		// clicks inside right panel: undo/redo buttons, PGN show etc
+		rx := boardLeft + 8*SquareSize + 20
+		ry := boardTop
+		// simple undo button
+		x, y := ebiten.CursorPosition()
+		if pointInRect(x, y, rx, ry+200, 120, 32) {
+			// Undo
+			g.builder.Undo()
+		}
+		if pointInRect(x, y, rx+140, ry+200, 120, 32) {
+			g.builder.Redo()
+		}
+	}
+
+	// right panel: moves & controls
+	rx := boardLeft + 8*SquareSize + 20
+	ry := boardTop
+	text.Draw(screen, "Moves:", basicfont.Face7x13, rx, ry+12, color.Black)
+	pgn := g.builder.PGNBody()
+	lines := splitToLines(pgn, 40)
+	for i, ln := range lines {
+		text.Draw(screen, ln, basicfont.Face7x13, rx, ry+30+i*14, color.Black)
+	}
+
+	// undo/redo buttons
+	ebitenutil.DrawRect(screen, float64(rx), float64(ry+200), 120, 32, color.RGBA{0x88, 0x88, 0x88, 0xff})
+	text.Draw(screen, "Undo", basicfont.Face7x13, rx+8, ry+222, color.White)
+	ebitenutil.DrawRect(screen, float64(rx+140), float64(ry+200), 120, 32, color.RGBA{0x88, 0x88, 0x88, 0xff})
+	text.Draw(screen, "Redo", basicfont.Face7x13, rx+148, ry+222, color.White)
+}
+
+// drawEditor renders an empty board and a palette and done button
+func (g *GUIProcessing) drawEditor(screen *ebiten.Image) {
+	boardLeft := BoardMargin
+	boardTop := HeaderH
+
+	// title
+	text.Draw(screen, "Board Editor", basicfont.Face7x13, boardLeft, 20, color.Black)
+
+	// draw board squares and pieces from editorBoard
+	for r := 0; r < 8; r++ {
+		for c := 0; c < 8; c++ {
+			x := boardLeft + c*SquareSize
+			y := boardTop + r*SquareSize
+			idx := r*8 + c
+			light := ((r + c) % 2) == 0
+			var sq color.RGBA
+			if light {
+				sq = color.RGBA{0xee, 0xdd, 0xc8, 0xff}
+			} else {
+				sq = color.RGBA{0x99, 0x77, 0x55, 0xff}
+			}
+			ebitenutil.DrawRect(screen, float64(x), float64(y), SquareSize, SquareSize, sq)
+			// piece
+			p := g.editorBoard[idx]
+			if p != base.EmptyPiece && p != base.InvalidPiece {
+				rn := base.ConvertRuneFromPiece(p)
+				col := color.Black
+				if base.PieceIsWhite(p) {
+					col = color.White
 				}
-				// text center approximate
-				tx := x + SquareSize/2 - 6
-				ty := y + SquareSize/2 + 6
-				text.Draw(screen, string(letter), basicfont.Face7x13, tx, ty, col)
+				text.Draw(screen, string(rn), basicfont.Face7x13, x+SquareSize/2-6, y+SquareSize/2+6, col)
+			}
+			// click handling
+			if mouseJustClicked() {
+				mx, my := ebiten.CursorPosition()
+				if mx >= x && mx < x+SquareSize && my >= y && my < y+SquareSize {
+					// place selectedPalette or remove with right-click
+					if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+						if g.selectedPalette == base.InvalidPiece {
+							// nothing selected -> remove piece
+							g.editorBoard[idx] = base.EmptyPiece
+						} else {
+							g.editorBoard[idx] = g.selectedPalette
+						}
+					}
+				}
 			}
 		}
 	}
 
-	// draw right panel: moves & controls
-	panelX := boardLeft + SquareSize*BoardSize + 16
-	px := panelX
-	py := boardTop
-	text.Draw(screen, "Moves:", basicfont.Face7x13, px, py+12, color.Black)
-	// list moves
-	for i, mv := range a.game.moves {
-		text.Draw(screen, fmt.Sprintf("%d. %s", i+1, mv), basicfont.Face7x13, px, py+30+i*14, color.Black)
-		if py+30+i*14 > a.game.windowHeight-40 {
-			break
+	// palette area below board
+	palTop := boardTop + 8*SquareSize + 8
+	px := boardLeft
+	text.Draw(screen, "Palette (click to select):", basicfont.Face7x13, px, palTop, color.Black)
+	// list pieces (white then black)
+	pieces := []base.Piece{base.WKing, base.WQueen, base.WRook, base.WBishop, base.WKnight, base.WPawn,
+		base.BKing, base.BQueen, base.BRook, base.BBishop, base.BKnight, base.BPawn}
+	for i, pc := range pieces {
+		x := px + (i%6)*48
+		y := palTop + 20 + (i/6)*48
+		ebitenutil.DrawRect(screen, float64(x), float64(y), 40, 40, color.RGBA{0x44, 0x44, 0x44, 0xff})
+		rn := base.ConvertRuneFromPiece(pc)
+		col := color.Black
+		if base.PieceIsWhite(pc) {
+			col = color.White
+		}
+		text.Draw(screen, string(rn), basicfont.Face7x13, x+12, y+26, col)
+		if mouseJustClicked() {
+			mx, my := ebiten.CursorPosition()
+			if mx >= x && mx < x+40 && my >= y && my < y+40 {
+				g.selectedPalette = pc
+			}
+		}
+		// highlight currently selected piece
+		if g.selectedPalette == pc {
+			ebitenutil.DrawRect(screen, float64(x), float64(y), 40, 4, color.RGBA{0xff, 0xd7, 0, 0xff})
 		}
 	}
-	// controls hint
-	text.Draw(screen, "Left click: select/move", basicfont.Face7x13, px, a.game.windowHeight-60, color.Black)
-	text.Draw(screen, "U: undo", basicfont.Face7x13, px, a.game.windowHeight-44, color.Black)
 
-	// handle mouse click (simple edge detector)
-	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
-	if mouseDown && !prevMouseDown {
-		// just pressed -> compute which square and handle
-		x, y := ebiten.CursorPosition()
-		a.game.handleClick(x, y)
+	// editor controls on right
+	rx := boardLeft + 8*SquareSize + 24
+	ry := boardTop
+	text.Draw(screen, "Editor controls:", basicfont.Face7x13, rx, ry, color.Black)
+	// side to move toggle
+	sideLabel := "White to move"
+	if !g.editorSideWhite {
+		sideLabel = "Black to move"
 	}
-	prevMouseDown = mouseDown
+	text.Draw(screen, sideLabel, basicfont.Face7x13, rx, ry+24, color.Black)
+	x, y := ebiten.CursorPosition()
+	if mouseJustClicked() && pointInRect(x, y, rx, ry+24, 180, 20) {
+		g.editorSideWhite = !g.editorSideWhite
+	}
+	// castling rights simple checkboxes
+	text.Draw(screen, fmt.Sprintf("WK: %v  WQ: %v", g.editorCastling.WK, g.editorCastling.WQ), basicfont.Face7x13, rx, ry+52, color.Black)
+	text.Draw(screen, fmt.Sprintf("BK: %v  BQ: %v", g.editorCastling.BK, g.editorCastling.BQ), basicfont.Face7x13, rx, ry+72, color.Black)
+	// toggles
+	x, y = ebiten.CursorPosition()
+	if mouseJustClicked() {
+		if pointInRect(x, y, rx, ry+52, 60, 18) {
+			g.editorCastling.WK = !g.editorCastling.WK
+		}
+		if pointInRect(x, y, rx+70, ry+52, 60, 18) {
+			g.editorCastling.WQ = !g.editorCastling.WQ
+		}
+		if pointInRect(x, y, rx, ry+72, 60, 18) {
+			g.editorCastling.BK = !g.editorCastling.BK
+		}
+		if pointInRect(x, y, rx+70, ry+72, 60, 18) {
+			g.editorCastling.BQ = !g.editorCastling.BQ
+		}
+	}
+	// Done button
+	btnX := rx
+	btnY := ry + 140
+	ebitenutil.DrawRect(screen, float64(btnX), float64(btnY), 120, 36, color.RGBA{0x22, 0x88, 0xcc, 0xff})
+	text.Draw(screen, "Done", basicfont.Face7x13, btnX+30, btnY+22, color.White)
+	x, y = ebiten.CursorPosition()
+	if mouseJustClicked() && pointInRect(x, y, btnX, btnY, 120, 36) {
+		// build base.Board and FEN
+		var b base.Board
+		for i := 0; i < 64; i++ {
+			b.Mailbox[i] = g.editorBoard[i]
+		}
+		b.WhiteToMove = g.editorSideWhite
+		// castling and en-passant/halfmove/fullmove left default
+		fen := convfen.ConvertBoardToFEN(b)
+		// if builder supports CreateFromFEN, call it; else just set mode to play and do nothing
+		if _, err := g.builder.CreateFromFEN(fen); err != nil {
+			g.mode = ScreenEditor
+		}
+		g.mode = ScreenPlay
+	}
+}
+
+// --- Utilities / small helpers ---
+
+// mouse state helpers
+var prevMouseDownState = false
+
+func mouseJustClicked() bool {
+	down := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
+	if down && !prevMouseDownState {
+		prevMouseDownState = down
+		return true
+	}
+	if !down && prevMouseDownState {
+		prevMouseDownState = down
+	}
+	return false
+}
+
+func mouseInRect(x, y, w, h int) bool {
+	mx, my := ebiten.CursorPosition()
+	return mx >= x && mx < x+w && my >= y && my < y+h
+}
+
+func pointInRect(pX, pY, x, y, w, h int) bool {
+	return pX >= x && pX < x+w && pY >= y && pY < y+h
+}
+
+// small helper: split pgn body into lines
+func splitToLines(s string, maxLen int) []string {
+	// naive split on spaces to multiple lines
+	words := strings.Fields(s)
+	var out []string
+	var cur string
+	for _, w := range words {
+		if len(cur)+1+len(w) > maxLen && cur != "" {
+			out = append(out, cur)
+			cur = w
+		} else {
+			if cur == "" {
+				cur = w
+			} else {
+				cur = cur + " " + w
+			}
+		}
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	return out
+}
+
+// editor init
+func (g *GUIProcessing) initEditorEmpty() {
+	for i := range g.editorBoard {
+		g.editorBoard[i] = base.EmptyPiece
+	}
+	g.selectedPalette = base.WPawn
+	g.editorSideWhite = true
+	g.editorCastling = base.StatusCasting{WK: true, WQ: true, BK: true, BQ: true}
 }

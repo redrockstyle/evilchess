@@ -13,6 +13,7 @@ import (
 
 type Builder interface {
 	MoveSAN(san string) base.GameStatus
+	EngineMove() base.GameStatus
 	Undo() base.GameStatus
 	Redo() base.GameStatus
 	CurrentBoard() base.Mailbox
@@ -118,6 +119,16 @@ func (c *CLIProcessing) Run() error {
 			if s == "q" || s == "Q" || s == "quit" {
 				fmt.Fprintln(c.out, "\nQuitting")
 				return nil
+			}
+			if s == "?" {
+				status := c.builder.EngineMove()
+				if status == base.InvalidGame {
+					fmt.Fprintln(c.out, "Error runtime engine")
+					// redraw board anyway
+					c.draw(c.builder.CurrentBoard())
+					c.printStatus()
+					continue
+				}
 			}
 			// try SAN move
 			status := c.builder.MoveSAN(s)

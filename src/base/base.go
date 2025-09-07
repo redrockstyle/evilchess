@@ -34,6 +34,21 @@ const (
 	Pass        GameStatus = 99
 )
 
+func (gs GameStatus) String() string {
+	switch gs {
+	case Check:
+		return "check"
+	case Checkmate:
+		return "checkmate"
+	case Stalemate:
+		return "stalemate"
+	case Pass:
+		return "pass"
+	default:
+		return "invalid"
+	}
+}
+
 type Mailbox [64]Piece
 
 type Point struct {

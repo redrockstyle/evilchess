@@ -34,3 +34,10 @@ go.work.sum
 # WASM Buld
 *.wasm
 wasm_exec.js
+
+# Engine Stockfish
+materials/engine/*.zip
+materials/engine/stockfish
+
+# EvilChess runtime
+evilchess.log

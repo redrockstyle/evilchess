@@ -31,7 +31,7 @@ func IsSquareAttacked(b *base.Board, idx int, byWhite bool) bool {
 	// for pawn
 	if byWhite {
 		for _, dw := range []int{-1, 1} {
-			ht := h + 1
+			ht := h - 1
 			wt := w + dw
 			if ht >= 0 && ht < 8 && wt >= 0 && wt < 8 {
 				p := base.GetPieceAt(mb, base.Point{H: uint8(ht), W: uint8(wt)})
@@ -42,7 +42,7 @@ func IsSquareAttacked(b *base.Board, idx int, byWhite bool) bool {
 		}
 	} else {
 		for _, dw := range []int{-1, 1} {
-			ht := h - 1
+			ht := h + 1
 			wt := w + dw
 			if ht >= 0 && ht < 8 && wt >= 0 && wt < 8 {
 				p := base.GetPieceAt(mb, base.Point{H: uint8(ht), W: uint8(wt)})

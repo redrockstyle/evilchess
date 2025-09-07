@@ -2,14 +2,13 @@ package main
 
 import (
 	"evilchess/src/base"
-	"evilchess/ui/gui"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func main() {
-	g := gui.NewGameFromFEN(base.FEN_START_GAME)
-	app := gui.NewApp(g)
+	g := NewGameFromFEN(base.FEN_START_GAME)
+	app := NewApp(g)
 
 	// ebiten.SetWindowSize(800, 800)
 	ebiten.SetWindowTitle("EvilChess")
