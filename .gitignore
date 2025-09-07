@@ -41,3 +41,5 @@ materials/engine/stockfish
 
 # EvilChess runtime
 evilchess.log
+
+ui/gui/kektest/*
