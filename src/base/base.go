@@ -1,6 +1,9 @@
 package base
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Forsyth–Edwards Notation
 const FEN_START_GAME string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -60,6 +63,20 @@ type Move struct {
 	From  Point
 	To    Point
 	Piece Piece
+}
+
+func (m Move) String() string {
+	var b strings.Builder
+	if r := ConvertUpperRuneFromPiece(m.Piece); r != '?' {
+		_, _ = b.WriteRune(r)
+	}
+	if s, err := AlgebraicFromSquare(ConvPointToIndex(m.From)); err == nil {
+		_, _ = b.WriteString(fmt.Sprintf("%s-", s))
+	}
+	if s, err := AlgebraicFromSquare(ConvPointToIndex(m.To)); err == nil {
+		_, _ = b.WriteString(s)
+	}
+	return b.String()
 }
 
 type StatusCasting struct {
@@ -267,6 +284,6 @@ func ConvertUpperRuneFromPiece(p Piece) rune {
 	case BKing:
 		return 'K'
 	default:
-		return '.'
+		return '?'
 	}
 }

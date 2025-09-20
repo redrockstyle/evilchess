@@ -11,6 +11,7 @@ import (
 	"evilchess/src/logx"
 	"fmt"
 	"io"
+	"time"
 )
 
 // at firts use Create* methods
@@ -112,13 +113,13 @@ func (gb *GameBuilder) FEN() string {
 
 // return PGN of this game
 func (gb *GameBuilder) PGN(w io.Writer) error {
-	gb.logger.Debug("get actual PGN")
+	// gb.logger.Debug("get actual PGN")
 	return convpgn.WritePGN(w, *gb.history.ExportPGNGame())
 }
 
 // all SAN moves
 func (gb *GameBuilder) PGNBody() string {
-	gb.logger.Debug("get actual moves")
+	// gb.logger.Debug("get actual moves")
 	return gb.history.MovesAsPGN()
 }
 
@@ -128,8 +129,13 @@ func (gb *GameBuilder) InfoGame() *history.InfoGame {
 
 // ---- Engine ----
 
-func (gb *GameBuilder) InitEngine(lvl engine.LevelAnalyze, e engine.Engine) {
+func (gb *GameBuilder) SetEngineWorker(e engine.Engine) {
 	gb.engine = e
+	gb.level = engine.LevelFive
+}
+
+func (gb *GameBuilder) SetEngineLevel(lvl engine.LevelAnalyze) {
+	gb.logger.Debugf("set level engine: %v", lvl)
 	gb.level = lvl
 }
 
@@ -138,19 +144,34 @@ func (gb *GameBuilder) EngineMove() base.GameStatus {
 		return base.InvalidGame
 	}
 
+	if err := gb.engine.Init(); err != nil {
+		gb.logger.Errorf("Error init engine: %v", err)
+		return base.InvalidGame
+	}
+	defer gb.engine.Close()
+
 	var err error
-	var res engine.AnalysisInfo
 	err = gb.engine.SetPosition(gb.board)
 	if err != nil {
 		return base.InvalidGame
 	}
-	err = gb.engine.StartAnalysis(*gb.engine.LevelToParams(gb.level))
+	err = gb.engine.StartAnalysis(engine.LevelToParams(gb.level))
 	if err != nil {
 		return base.InvalidGame
 	}
-	res, err = gb.engine.WaitDone()
-	if err != nil {
+
+	if gb.level == engine.LevelLast {
+		time.Sleep(engine.StopAnalyzeTimeout)
+		gb.engine.StopAnalysis()
+	} else {
+		gb.engine.WaitDone()
+	}
+
+	info := gb.engine.BestNow()
+	mv := info.GetBestMove(gb.board)
+	if mv == nil {
 		return base.InvalidGame
 	}
-	return gb.Move(*res.BestMove)
+	gb.logger.Infof("best engine move: %v", mv)
+	return gb.Move(*mv)
 }

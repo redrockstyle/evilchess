@@ -4,7 +4,7 @@ import (
 	"context"
 	"evilchess/src"
 	"evilchess/src/engine"
-	"evilchess/src/engine/myengine"
+	"evilchess/src/engine/uci"
 	"evilchess/src/logx"
 	clic "evilchess/ui/cli"
 	"evilchess/ui/gui"
@@ -80,7 +80,8 @@ func RunEvilChess() error {
 						return nil
 					}
 					defer file.Close()
-					gb := src.NewBuilderBoard(GetLogger(file, c))
+					logger := GetLogger(file, c)
+					gb := src.NewBuilderBoard(logger)
 					if pgn != "" {
 						file, err := os.Open(pgn)
 						if err != nil {
@@ -97,7 +98,10 @@ func RunEvilChess() error {
 							return nil
 						}
 					} else {
-						gb.InitEngine(engine.LevelLast, myengine.NewEvilEngine())
+						// gb.InitEngine(engine.LevelLast, myengine.NewEvilEngine())
+						gb.SetEngineWorker(uci.NewUCIExec(logger, "materials/engine/stockfish/stockfish"))
+						gb.SetEngineLevel(engine.LevelFive)
+						// gb.InitEngine(engine.LevelThree, uci.NewStockfishEngine(logger, "stockfish"))
 						gb.CreateClassic()
 					}
 

@@ -7,6 +7,7 @@ import (
 	"evilchess/src/logic/convert/convfen"
 	"evilchess/src/logic/rules"
 	"evilchess/src/logic/rules/moves"
+	"evilchess/src/logx"
 	"fmt"
 	"sync"
 	"time"
@@ -29,9 +30,11 @@ type EvilEngine struct {
 
 	// internal metrics
 	nodes int64
+
+	// log
+	logx logx.Logger
 }
 
-// NewMinimaxEngine создает экземпляр
 func NewEvilEngine() *EvilEngine {
 	return &EvilEngine{
 		board: nil,
@@ -39,9 +42,8 @@ func NewEvilEngine() *EvilEngine {
 	}
 }
 
-// Init — опционально принимает opts (не используем)
-func (e *EvilEngine) Init(opts map[string]interface{}) error {
-	// можно настроить threadpool / eval weights и т.д.
+func (e *EvilEngine) Init() error {
+	// threadpool / eval weights
 	return nil
 }
 
@@ -72,7 +74,6 @@ func (e *EvilEngine) LevelToParams(lvl engine.LevelAnalyze) *engine.SearchParams
 		return &engine.SearchParams{
 			MaxDepth:  0,
 			MaxTimeMs: 2000,
-			MaxNodes:  0,
 			Infinite:  false,
 		}
 	case engine.LevelThree:
@@ -80,7 +81,6 @@ func (e *EvilEngine) LevelToParams(lvl engine.LevelAnalyze) *engine.SearchParams
 		return &engine.SearchParams{
 			MaxDepth:  0,
 			MaxTimeMs: 3000,
-			MaxNodes:  0,
 			Infinite:  false,
 		}
 	case engine.LevelFive:
@@ -88,14 +88,12 @@ func (e *EvilEngine) LevelToParams(lvl engine.LevelAnalyze) *engine.SearchParams
 		return &engine.SearchParams{
 			MaxDepth:  0,
 			MaxTimeMs: 6000,
-			MaxNodes:  0,
 			Infinite:  false,
 		}
 	case engine.LevelSeven:
 		return &engine.SearchParams{
 			MaxDepth:  0,
 			MaxTimeMs: 10000,
-			MaxNodes:  0,
 			Infinite:  false,
 		}
 	case engine.LevelLast:
@@ -105,7 +103,6 @@ func (e *EvilEngine) LevelToParams(lvl engine.LevelAnalyze) *engine.SearchParams
 	return &engine.SearchParams{
 		MaxDepth:  0,
 		MaxTimeMs: 0,
-		MaxNodes:  0,
 		Infinite:  false,
 	}
 }
@@ -156,26 +153,16 @@ func (e *EvilEngine) StopAnalysis() error {
 	return nil
 }
 
-// BestNow — возвращает последний опубликованный снэпшот
-func (e *EvilEngine) BestNow() (engine.AnalysisInfo, error) {
+func (e *EvilEngine) BestNow() engine.AnalysisInfo {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.lastInfo.Depth == 0 && len(e.lastInfo.PV) == 0 && !e.running {
-		// maybe no data
-		return engine.AnalysisInfo{}, fmt.Errorf("no analysis data")
-	}
-	// return a copy
-	info := e.lastInfo
-	return info, nil
+	return e.lastInfo
 }
 
-// WaitDone — ждёт завершения и возвращает последний snapshot
-func (e *EvilEngine) WaitDone() (engine.AnalysisInfo, error) {
+func (e *EvilEngine) WaitDone() {
 	e.wg.Wait()
-	return e.BestNow()
 }
 
-// Subscribe — подписка на обновления. Возвращает функцию отписки.
 func (e *EvilEngine) Subscribe(ch chan<- engine.AnalysisInfo) (unsubscribe func()) {
 	e.subsMu.Lock()
 	id := e.nextSubID
@@ -189,16 +176,14 @@ func (e *EvilEngine) Subscribe(ch chan<- engine.AnalysisInfo) (unsubscribe func(
 	}
 }
 
-// Close — освобождает ресурсы, останавливает анализ если нужен
-func (e *EvilEngine) Close() error {
+func (e *EvilEngine) Close() {
 	_ = e.StopAnalysis()
 	e.wg.Wait()
-	return nil
+	return
 }
 
 // --- internal helpers ---
 
-// publish сообщает всем подписчикам новый snapshot (не блокирует)
 func (e *EvilEngine) publish(info engine.AnalysisInfo) {
 	// store lastInfo
 	e.mu.Lock()
@@ -211,7 +196,6 @@ func (e *EvilEngine) publish(info engine.AnalysisInfo) {
 		select {
 		case ch <- info:
 		default:
-			// если канал заполнен — пропускаем (не хотим блокировать движок)
 		}
 	}
 	e.subsMu.Unlock()
@@ -252,7 +236,7 @@ func evaluateMaterial(b *base.Board) int {
 	return sum
 }
 
-// searchWorker — демонстрационный iterative deepening + minimax (без оптимизаций)
+// searchWorker — iterative deepening + minimax (kekw worker)
 func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParams) {
 	defer e.wg.Done()
 	start := time.Now()

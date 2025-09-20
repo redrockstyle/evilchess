@@ -2,37 +2,28 @@ package cli
 
 import (
 	"bufio"
+	"evilchess/src"
 	"evilchess/src/base"
+	"evilchess/src/engine"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/term"
 )
 
-type Builder interface {
-	MoveSAN(san string) base.GameStatus
-	EngineMove() base.GameStatus
-	Undo() base.GameStatus
-	Redo() base.GameStatus
-	CurrentBoard() base.Mailbox
-	FEN() string
-	PGN(w io.Writer) error
-	PGNBody() string
-	Status() base.GameStatus
-}
-
 type DrawFunc func(mb base.Mailbox)
 
 type CLIProcessing struct {
-	builder Builder
+	builder *src.GameBuilder
 	draw    DrawFunc
 	in      *os.File
 	out     io.Writer
 }
 
-func NewCLI(b Builder, draw DrawFunc) *CLIProcessing {
+func NewCLI(b *src.GameBuilder, draw DrawFunc) *CLIProcessing {
 	return &CLIProcessing{builder: b, draw: draw, in: os.Stdin, out: os.Stdout}
 }
 
@@ -107,6 +98,17 @@ func (c *CLIProcessing) Run() error {
 			if s == "" {
 				continue
 			}
+			// quit command
+			if s == "q" || s == "Q" || s == "quit" {
+				fmt.Fprintln(c.out, "\nQuitting")
+				return nil
+			}
+			if s >= "1" && s <= "9" {
+				lvl, _ := strconv.Atoi(s)
+				fmt.Fprintf(c.out, "\nSet level engine %d\n", lvl)
+				c.builder.SetEngineLevel(engine.LevelAnalyze(lvl))
+				continue
+			}
 			if s == "m" {
 				fmt.Fprintf(c.out, "\nMoves: %s\n", c.builder.PGNBody())
 				continue
@@ -115,35 +117,31 @@ func (c *CLIProcessing) Run() error {
 				fmt.Fprintf(c.out, "\nMoves: %s\n", c.builder.PGNBody())
 				continue
 			}
-			// quit command
-			if s == "q" || s == "Q" || s == "quit" {
-				fmt.Fprintln(c.out, "\nQuitting")
-				return nil
-			}
+
 			if s == "?" {
 				status := c.builder.EngineMove()
 				if status == base.InvalidGame {
-					fmt.Fprintln(c.out, "Error runtime engine")
+					fmt.Fprintln(c.out, "\nError runtime engine")
+				}
+				c.draw(c.builder.CurrentBoard())
+				c.printStatus()
+				continue
+			} else {
+				// try SAN move
+				status := c.builder.MoveSAN(s)
+				if status == base.InvalidGame {
+					fmt.Fprintf(c.out, "Invalid move: %s\n", s)
 					// redraw board anyway
 					c.draw(c.builder.CurrentBoard())
 					c.printStatus()
 					continue
 				}
-			}
-			// try SAN move
-			status := c.builder.MoveSAN(s)
-			if status == base.InvalidGame {
-				fmt.Fprintf(c.out, "Invalid move: %s\n", s)
-				// redraw board anyway
+				// success
 				c.draw(c.builder.CurrentBoard())
 				c.printStatus()
-				continue
-			}
-			// success
-			c.draw(c.builder.CurrentBoard())
-			c.printStatus()
-			if terminalFinished(status) {
-				return nil
+				if terminalFinished(status) {
+					return nil
+				}
 			}
 			continue
 		}
