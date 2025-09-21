@@ -8,6 +8,7 @@ import (
 	"evilchess/src/logx"
 	clic "evilchess/ui/cli"
 	"evilchess/ui/gui"
+	"evilchess/ui/gui/ddraw"
 	"fmt"
 	"os"
 
@@ -33,7 +34,13 @@ func RunGUI(c *cli.Command) error {
 		return nil
 	}
 	defer file.Close()
-	g := gui.NewGUI(src.NewBuilderBoard(GetLogger(file, c)))
+	logger := GetLogger(file, c)
+	g, err := gui.NewGUI(src.NewBuilderBoard(logger), logger)
+	if err != nil {
+		fmt.Printf("error open GUI: %v", err)
+		logger.Errorf("error open GUI: %v", err)
+		return nil
+	}
 	return g.Run()
 }
 
@@ -118,7 +125,7 @@ func RunEvilChess() error {
 				Name:  "gui",
 				Flags: guiff,
 				Action: func(ctx context.Context, c *cli.Command) error {
-					if err := RunGUI(c); err != nil {
+					if err := RunGUI(c); err != nil && err != ddraw.ErrExit {
 						fmt.Printf("error GUI: %v", err)
 					}
 					return nil
@@ -126,7 +133,7 @@ func RunEvilChess() error {
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			if err := RunGUI(c); err != nil {
+			if err := RunGUI(c); err != nil && err != ddraw.ErrExit {
 				fmt.Printf("error GUI: %v", err)
 			}
 			return nil

@@ -1,0 +1,12 @@
+{
+    
+    "lang.title":"Язык",
+    "lang.type":"RU",
+
+    "__comment1":"для отрисовки меню",
+    "menu.play":"Играть",
+    "menu.editor":"Редактор доски",
+    "menu.analyze":"Анализ игры",
+    "menu.settings":"Настройки",
+    "menu.exit":"Выход"
+}

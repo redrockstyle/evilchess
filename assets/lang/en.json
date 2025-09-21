@@ -1,0 +1,17 @@
+{
+    "version":"EvilChess GUI v1.0.0",
+
+    "lang.title":"Lang",
+    "lang.type":"EN",
+
+    "__comment1":"for draw menu",
+    "menu.play":"Play",
+    "menu.editor":"Board Editor",
+    "menu.analyze":"Board Editor",
+    "menu.settings":"Settings",
+    "menu.exit":"Exit",
+
+    "__comment2":"text buttons",
+    "button.ok":"OK"
+
+}
