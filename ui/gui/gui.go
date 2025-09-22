@@ -3,61 +3,51 @@ package gui
 import (
 	"evilchess/src"
 	"evilchess/src/logx"
-	"evilchess/ui/gui/ddraw"
-	"evilchess/ui/gui/ddraw/dmenu"
-	"evilchess/ui/gui/tools/lang"
+	"evilchess/ui/gui/gbase/gconf"
+	"evilchess/ui/gui/gctx"
+	"evilchess/ui/gui/gdraw"
+	"evilchess/ui/gui/ghelper"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type GUIProcessing struct {
-	current ddraw.Scene
-	ctx     ddraw.GameContext
+	sc  gdraw.Scene
+	ctx *gctx.GUIGameContext
 }
 
-func NewGUI(b *src.GameBuilder, logx logx.Logger) (*GUIProcessing, error) {
-	helper, err := ddraw.NewGUIHelperDraw()
+func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIProcessing, error) {
+	cfg, err := gconf.NewGUIConfigWorker(rootDirAssets)
 	if err != nil {
 		return nil, err
 	}
-	lw, err := lang.NewGUILangWorker("assets/lang")
+	as, err := ghelper.NewGUIAssetsWorker(rootDirAssets, cfg)
 	if err != nil {
 		return nil, err
 	}
-	ctx := ddraw.GameContext{
-		Builder: b,
-		Helper:  helper,
-		Lang:    lw,
-		Window:  struct{ W, H int }{ddraw.WindowW, ddraw.WindowH},
-		Logx:    logx,
-	}
-	return &GUIProcessing{
-		current: dmenu.NewGUIMenuDrawer(&ctx),
-		ctx:     ctx,
-	}, nil
+	ctx := gctx.NewGUIGameContext(b, as, cfg, logx)
+	return &GUIProcessing{sc: gdraw.NewGUIMenuDrawer(ctx), ctx: ctx}, nil
 }
 
 func (gp *GUIProcessing) Run() error {
-	ebiten.SetWindowSize(gp.ctx.Window.W, gp.ctx.Window.H)
+	ebiten.SetWindowSize(gp.ctx.ConfigWorker.Config.WindowW, gp.ctx.ConfigWorker.Config.WindowH)
 	ebiten.SetWindowTitle("EvilChess")
 	return ebiten.RunGame(gp)
 }
 
 func (gp *GUIProcessing) Update() error {
-	next, err := gp.current.Update(&gp.ctx)
+	t, err := gp.sc.Update(gp.ctx)
 	if err != nil {
 		return err
 	}
-	if next != nil {
-		gp.current = next
-	}
+	gp.sc = t.ToScene(gp.sc, gp.ctx)
 	return nil
 }
 
 func (gp *GUIProcessing) Draw(screen *ebiten.Image) {
-	gp.current.Draw(&gp.ctx, screen)
+	gp.sc.Draw(gp.ctx, screen)
 }
 
 func (gp *GUIProcessing) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return gp.ctx.Window.W, gp.ctx.Window.H
+	return gp.ctx.ConfigWorker.Config.WindowW, gp.ctx.ConfigWorker.Config.WindowH
 }

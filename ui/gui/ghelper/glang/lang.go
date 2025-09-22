@@ -1,7 +1,9 @@
-package lang
+package glang
 
 import (
 	"encoding/json"
+	"errors"
+	"evilchess/ui/gui/gbase/gconf"
 	"fmt"
 	"os"
 )
@@ -11,7 +13,30 @@ type LangType int
 const (
 	EN LangType = iota
 	RU
+	ZZ
 )
+
+func LangTypeByString(lang string) LangType {
+	switch lang {
+	case "en":
+		return EN
+	case "ru":
+		return RU
+	default:
+	}
+	return ZZ
+}
+
+func (t LangType) String() string {
+	switch t {
+	case EN:
+		return "en"
+	case RU:
+		return "ru"
+	default:
+	}
+	return ""
+}
 
 type GUILangWorker struct {
 	workdir string
@@ -20,12 +45,16 @@ type GUILangWorker struct {
 }
 
 // create object LangWorker and set EN lang
-func NewGUILangWorker(workdir string) (*GUILangWorker, error) {
+func NewGUILangWorker(workdir string, cfg *gconf.GUIConfigWorker) (*GUILangWorker, error) {
 	lw := &GUILangWorker{
 		dict:    make(map[string]string),
 		workdir: workdir,
 	}
-	if err := lw.SetLang(EN); err != nil {
+	t := LangTypeByString(cfg.Config.Lang)
+	if t == ZZ {
+		return nil, errors.New("unsupported lang")
+	}
+	if err := lw.SetLang(t); err != nil {
 		return nil, err
 	}
 	return lw, nil

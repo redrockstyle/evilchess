@@ -8,7 +8,7 @@ import (
 	"evilchess/src/logx"
 	clic "evilchess/ui/cli"
 	"evilchess/ui/gui"
-	"evilchess/ui/gui/ddraw"
+	"evilchess/ui/gui/gbase"
 	"fmt"
 	"os"
 
@@ -30,16 +30,14 @@ func GetLogger(file *os.File, c *cli.Command) *logx.Logx {
 func RunGUI(c *cli.Command) error {
 	file, err := os.OpenFile(logfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		fmt.Printf("error open logfile: %v", err)
-		return nil
+		return fmt.Errorf("error open logfile: %v", err)
 	}
 	defer file.Close()
 	logger := GetLogger(file, c)
-	g, err := gui.NewGUI(src.NewBuilderBoard(logger), logger)
+	g, err := gui.NewGUI(src.NewBuilderBoard(logger), "", logger)
 	if err != nil {
-		fmt.Printf("error open GUI: %v", err)
-		logger.Errorf("error open GUI: %v", err)
-		return nil
+		logger.Errorf("error init GUI: %v", err)
+		return fmt.Errorf("error init GUI: %v", err)
 	}
 	return g.Run()
 }
@@ -125,7 +123,7 @@ func RunEvilChess() error {
 				Name:  "gui",
 				Flags: guiff,
 				Action: func(ctx context.Context, c *cli.Command) error {
-					if err := RunGUI(c); err != nil && err != ddraw.ErrExit {
+					if err := RunGUI(c); err != nil && err != gbase.ErrExit {
 						fmt.Printf("error GUI: %v", err)
 					}
 					return nil
@@ -133,7 +131,7 @@ func RunEvilChess() error {
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			if err := RunGUI(c); err != nil && err != ddraw.ErrExit {
+			if err := RunGUI(c); err != nil && err != gbase.ErrExit {
 				fmt.Printf("error GUI: %v", err)
 			}
 			return nil
