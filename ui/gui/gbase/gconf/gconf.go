@@ -6,11 +6,6 @@ import (
 	"os"
 )
 
-type GUIConfigWorker struct {
-	Path   string
-	Config Config
-}
-
 type Config struct {
 	Theme   string `json:"theme"`    // light/dark
 	Engine  string `json:"engine"`   // internal/external
@@ -33,17 +28,18 @@ func defaultConfig() Config {
 	}
 }
 
-func NewGUIConfigWorker(pathToConfig string) (*GUIConfigWorker, error) {
-	confPath := "evilchess.json"
+func NewGUIConfig() (*Config, error) {
+	file := "evilchess.json"
 
-	_, err := os.Stat(confPath)
+	_, err := os.Stat(file)
 	if os.IsNotExist(err) {
-		return &GUIConfigWorker{Path: confPath, Config: defaultConfig()}, nil
+		def := defaultConfig()
+		return &def, nil
 	} else if err != nil {
 		return nil, err
 	}
 
-	conf, err := os.Open(confPath)
+	conf, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
@@ -56,15 +52,16 @@ func NewGUIConfigWorker(pathToConfig string) (*GUIConfigWorker, error) {
 	}
 	correctableConfig(&c)
 
-	return &GUIConfigWorker{Path: confPath, Config: c}, nil
+	return &c, nil
 }
 
-func (c *GUIConfigWorker) Save() error {
-	jsonData, err := json.MarshalIndent(c.Config, "", "    ")
+func (c *Config) Save() error {
+	file := "evilchess.json"
+	jsonData, err := json.MarshalIndent(c, "", "    ")
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(c.Path+"/evilchess.json", jsonData, 0644)
+	err = os.WriteFile(file, jsonData, 0644)
 	if err != nil {
 		return err
 	}

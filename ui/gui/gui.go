@@ -18,7 +18,7 @@ type GUIProcessing struct {
 }
 
 func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIProcessing, error) {
-	cfg, err := gconf.NewGUIConfigWorker(rootDirAssets)
+	cfg, err := gconf.NewGUIConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (gp *GUIProcessing) Run() error {
 		gp.ctx.AssetsWorker.IconNative(48),
 		gp.ctx.AssetsWorker.IconNative(60),
 	})
-	ebiten.SetWindowSize(gp.ctx.ConfigWorker.Config.WindowW, gp.ctx.ConfigWorker.Config.WindowH)
+	ebiten.SetWindowSize(gp.ctx.Config.WindowW, gp.ctx.Config.WindowH)
 	ebiten.SetWindowTitle("EvilChess")
 	return ebiten.RunGame(gp)
 }
@@ -56,5 +56,5 @@ func (gp *GUIProcessing) Draw(screen *ebiten.Image) {
 }
 
 func (gp *GUIProcessing) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return gp.ctx.ConfigWorker.Config.WindowW, gp.ctx.ConfigWorker.Config.WindowH
+	return gp.ctx.Config.WindowW, gp.ctx.Config.WindowH
 }

@@ -19,7 +19,7 @@ type GUIAssetsWorker struct {
 	lang        *glang.GUILangWorker
 }
 
-func NewGUIAssetsWorker(rootDirAssets string, cfg *gconf.GUIConfigWorker) (*GUIAssetsWorker, error) {
+func NewGUIAssetsWorker(rootDirAssets string, cfg *gconf.Config) (*GUIAssetsWorker, error) {
 	pieceImages, err := gimages.LoadImagePieceAssets("assets/images")
 	if err != nil {
 		return nil, err

@@ -41,5 +41,6 @@ materials/engine/stockfish
 
 # EvilChess runtime
 evilchess.log
+evilchess.json
 
 ui/gui/guitest

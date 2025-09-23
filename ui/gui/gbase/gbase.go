@@ -43,6 +43,17 @@ type Palette struct {
 	ModalBg      color.RGBA
 }
 
+func (p Palette) String() string {
+	switch p {
+	case LightPalette:
+		return "light"
+	case DarkPalette:
+		return "dark"
+	default:
+	}
+	return ""
+}
+
 func PaletteFromString(p string) Palette {
 	switch p {
 	case "light":

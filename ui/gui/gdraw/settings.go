@@ -4,6 +4,7 @@ import (
 	"evilchess/ui/gui/gbase"
 	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/ghelper"
+	"evilchess/ui/gui/ghelper/glang"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -15,9 +16,9 @@ import (
 )
 
 type GUISettingsDrawer struct {
+	langIndex  int // 0 = en, 1 = ru
 	themeIndex int // 0 = light, 1 = dark
 	engineMode int // 0 = internal, 1 = uci
-	uciPath    string
 
 	// messagebox
 	msg gbase.MessageBox
@@ -25,6 +26,8 @@ type GUISettingsDrawer struct {
 	buttons []*gbase.Button
 
 	// index of buttons
+	btnLangEnIdx     int
+	btnLangRuIdx     int
 	btnThemeLightIdx int
 	btnThemeDarkIdx  int
 	btnEngineIntIdx  int
@@ -36,7 +39,6 @@ type GUISettingsDrawer struct {
 
 	// internal ui state
 	prevMouseDown bool
-	fileChosenCh  chan string
 	browseActive  bool
 
 	prevTime time.Time
@@ -44,11 +46,22 @@ type GUISettingsDrawer struct {
 
 func NewGUISettingsDrawer(ctx *gctx.GUIGameContext) *GUISettingsDrawer {
 	sd := &GUISettingsDrawer{
-		fileChosenCh: make(chan string, 1),
-		prevTime:     time.Now(),
+		prevTime: time.Now(),
 	}
 	if ctx.Theme == gbase.DarkPalette {
 		sd.themeIndex = 1
+	}
+	if ctx.Config.UCIPath != "" && ctx.Config.Engine == "external" {
+		if err := IsCorrectEngine(ctx); err == nil {
+			sd.engineMode = 1
+		} else {
+			ctx.Logx.Error("invalid engine config")
+			ctx.Config.UCIPath = ""
+			ctx.Config.Engine = "internal"
+		}
+	}
+	if ctx.AssetsWorker.Lang().GetLang() == glang.RU {
+		sd.langIndex = 1
 	}
 	sd.makeLayout(ctx)
 	sd.refreshButtons(ctx)
@@ -56,15 +69,6 @@ func NewGUISettingsDrawer(ctx *gctx.GUIGameContext) *GUISettingsDrawer {
 }
 
 func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
-	select {
-	case p := <-sd.fileChosenCh:
-		sd.browseActive = false
-		if p != "" {
-			sd.uciPath = p
-		}
-	default:
-	}
-
 	// mouse handling
 	mx, my := ebiten.CursorPosition()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
@@ -91,8 +95,8 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 			mw := textW + paddingX
 			mh := textH + paddingY
 
-			mx := (ctx.ConfigWorker.Config.WindowW - mw) / 2
-			my := (ctx.ConfigWorker.Config.WindowH - mh) / 2
+			mx := (ctx.Config.WindowW - mw) / 2
+			my := (ctx.Config.WindowH - mh) / 2
 			okW, okH := 120, 44
 			okX := mx + (mw-okW)/2
 			okY := my + mh - 56
@@ -118,6 +122,16 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 		b.UpdateAnim(dt)
 		if clicked {
 			switch i {
+			case sd.btnLangEnIdx:
+				sd.langIndex = 0
+				ctx.Config.Lang = "en"
+				ctx.AssetsWorker.Lang().SetLang(glang.EN)
+				sd.refreshButtons(ctx)
+			case sd.btnLangRuIdx:
+				sd.langIndex = 1
+				ctx.Config.Lang = "ru"
+				ctx.AssetsWorker.Lang().SetLang(glang.RU)
+				sd.refreshButtons(ctx)
 			case sd.btnThemeLightIdx:
 				sd.themeIndex = 0
 				ctx.Theme = gbase.LightPalette
@@ -128,7 +142,7 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 				sd.refreshButtons(ctx)
 			case sd.btnEngineIntIdx:
 				sd.engineMode = 0
-				sd.uciPath = ""
+				ctx.Config.UCIPath = ""
 				sd.refreshButtons(ctx)
 			case sd.btnEngineUciIdx:
 				sd.engineMode = 1
@@ -137,29 +151,32 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 				// open dialog if UCI used
 				if sd.engineMode == 1 {
 					sd.browseActive = true
-					go func(ch chan<- string) {
-						path, err := dialog.File().Title("Select UCI engine binary").Load()
-						if err != nil {
-							ch <- ""
-							return
-						}
-						ch <- path
-					}(sd.fileChosenCh)
+					var err error
+					ctx.Config.UCIPath, err = dialog.File().Title("Select UCI engine binary").Load()
+					if err != nil {
+						ctx.Logx.Errorf("error dialog: %v", err)
+					}
+					if err = IsCorrectEngine(ctx); err != nil {
+						ctx.Config.UCIPath = ""
+						ctx.Logx.Error("selected file is not engine")
+						ghelper.ShowMessage(&sd.msg, ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
+					}
+					sd.browseActive = false
 				}
 			case sd.btnDebugIdx:
 				// toggle debug in config immediately
-				ctx.ConfigWorker.Config.Debug = !ctx.ConfigWorker.Config.Debug
+				ctx.Config.Debug = !ctx.Config.Debug
 				sd.refreshButtons(ctx)
 			case sd.btnApplyIdx:
-				// save ConfigWorker
+				// save Config
 				if sd.engineMode == 1 {
-					ctx.ConfigWorker.Config.Engine = "external"
-					ctx.ConfigWorker.Config.UCIPath = sd.uciPath
+					ctx.Config.Engine = "external"
 				} else {
-					ctx.ConfigWorker.Config.Engine = "internal"
-					ctx.ConfigWorker.Config.UCIPath = ""
+					ctx.Config.Engine = "internal"
+					ctx.Config.UCIPath = ""
 				}
-				err := ctx.ConfigWorker.Save()
+				ctx.Config.Theme = ctx.Theme.String()
+				err := ctx.Config.Save()
 				if err != nil {
 					ghelper.ShowMessage(&sd.msg, ctx.AssetsWorker.Lang().T("settings.save.failed"), nil)
 				} else {
@@ -185,9 +202,13 @@ func (sd *GUISettingsDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image
 	screen.Fill(ctx.Theme.Bg)
 
 	// titles
-	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.title"), ctx.AssetsWorker.Fonts().Bold, 40, 80, ctx.Theme.MenuText)
-	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.theme"), ctx.AssetsWorker.Fonts().Pixel, 60, 150, ctx.Theme.MenuText)
-	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.engine"), ctx.AssetsWorker.Fonts().Pixel, 60, 230, ctx.Theme.MenuText)
+	titlesX := 40
+	titlesY := 80
+	spacingY := 74
+	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.title"), ctx.AssetsWorker.Fonts().Bold, titlesX, titlesY, ctx.Theme.MenuText)
+	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.lang"), ctx.AssetsWorker.Fonts().Pixel, titlesX+20, titlesY+spacingY, ctx.Theme.MenuText)
+	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.theme"), ctx.AssetsWorker.Fonts().Pixel, titlesX+20, titlesY+2*spacingY, ctx.Theme.MenuText)
+	text.Draw(screen, ctx.AssetsWorker.Lang().T("settings.engine"), ctx.AssetsWorker.Fonts().Pixel, titlesX+20, titlesY+3*spacingY, ctx.Theme.MenuText)
 
 	// draw buttions
 	for i, b := range sd.buttons {
@@ -205,18 +226,13 @@ func (sd *GUISettingsDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image
 		b.DrawAnimated(screen, ctx.AssetsWorker.Fonts().PixelLow, ctx.Theme)
 	}
 
-	// if message box open -> draw overlay and modal
-	if sd.msg.Open || sd.msg.Animating {
-		DrawModal(ctx, sd.msg.Scale, sd.msg.Text, screen)
-	}
-
 	// text browse
 	if sd.engineMode == 1 {
 		if sd.btnBrowseIdx >= 0 && sd.btnBrowseIdx < len(sd.buttons) {
 			b := sd.buttons[sd.btnBrowseIdx]
 			display := ctx.AssetsWorker.Lang().T("settings.engine.no_file")
-			if sd.uciPath != "" {
-				display = filepath.Base(sd.uciPath)
+			if ctx.Config.UCIPath != "" {
+				display = filepath.Base(ctx.Config.UCIPath)
 			}
 			if sd.browseActive {
 				display = ctx.AssetsWorker.Lang().T("settings.engine.selecting")
@@ -225,8 +241,13 @@ func (sd *GUISettingsDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image
 		}
 	}
 
+	// if message box open -> draw overlay and modal
+	if sd.msg.Open || sd.msg.Animating {
+		DrawModal(ctx, sd.msg.Scale, sd.msg.Text, screen)
+	}
+
 	// debug TPS
-	if ctx.ConfigWorker.Config.Debug {
+	if ctx.Config.Debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
 	}
 }
@@ -234,86 +255,115 @@ func (sd *GUISettingsDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image
 // create buttons
 func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	// sizes
-	startX := 260
-	startY := 120
-	themeW, themeH := 220, 56
+	btnW := 220
+	btnH := 56
+	spacingX := 20 // horizontal
+	spacingY := 18 // vertical
 	sd.buttons = []*gbase.Button{}
 
+	startX := 260
+	startY := 120
+
+	// Lang: en
+	enImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	ben := &gbase.Button{
+		Label: ctx.AssetsWorker.Lang().T("settings.lang.en"),
+		X:     startX,
+		Y:     startY,
+		W:     btnW,
+		H:     btnH,
+		Image: enImg,
+		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
+	}
+	sd.btnLangEnIdx = len(sd.buttons)
+	sd.buttons = append(sd.buttons, ben)
+	// Lang: ru (to the right)
+	ruImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	bru := &gbase.Button{
+		Label: ctx.AssetsWorker.Lang().T("settings.lang.ru"),
+		X:     startX + btnW + spacingX,
+		Y:     startY,
+		W:     btnW,
+		H:     btnH,
+		Image: ruImg,
+		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
+	}
+	sd.btnLangRuIdx = len(sd.buttons)
+	sd.buttons = append(sd.buttons, bru)
+
 	// Theme: Light
-	lightImg := ghelper.RenderRoundedRect(themeW, themeH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	themeY := startY + btnH + spacingY
+	lightImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bLight := &gbase.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.theme.light"),
 		X:     startX,
-		Y:     startY,
-		W:     themeW,
-		H:     themeH,
+		Y:     themeY,
+		W:     btnW,
+		H:     btnH,
 		Image: lightImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
 	sd.btnThemeLightIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bLight)
-
 	// Theme: Dark (to the right)
-	darkImg := ghelper.RenderRoundedRect(themeW, themeH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	darkImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bDark := &gbase.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.theme.dark"),
-		X:     startX + themeW + 20,
-		Y:     startY,
-		W:     themeW,
-		H:     themeH,
+		X:     startX + btnW + spacingX,
+		Y:     themeY,
+		W:     btnW,
+		H:     btnH,
 		Image: darkImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
 	sd.btnThemeDarkIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bDark)
 
-	// Engine tiles (same size)
-	engineY := startY + 75
-	intImg := ghelper.RenderRoundedRect(themeW, themeH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	uciImg := ghelper.RenderRoundedRect(themeW, themeH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-
+	// Engine: internal
+	engineY := themeY + btnH + spacingY
+	intImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bInt := &gbase.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.engine.internal"),
 		X:     startX,
 		Y:     engineY,
-		W:     themeW,
-		H:     themeH,
+		W:     btnW,
+		H:     btnH,
 		Image: intImg,
-		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
-	}
-	bUci := &gbase.Button{
-		Label: ctx.AssetsWorker.Lang().T("settings.engine.uci"),
-		X:     startX + themeW + 20,
-		Y:     engineY,
-		W:     themeW,
-		H:     themeH,
-		Image: uciImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
 	sd.btnEngineIntIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bInt)
+	// Engine: external
+	uciImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	bUci := &gbase.Button{
+		Label: ctx.AssetsWorker.Lang().T("settings.engine.uci"),
+		X:     startX + btnW + spacingX,
+		Y:     engineY,
+		W:     btnW,
+		H:     btnH,
+		Image: uciImg,
+		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
+	}
 	sd.btnEngineUciIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bUci)
 
 	// Browse wide field
-	browseW, browseH := 560, 56
-	browseX := startX
-	browseY := engineY + themeH + 18
-	browseImg := ghelper.RenderRoundedRect(browseW, browseH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	// browseW, browseH := 560, 56
+	browseY := engineY + btnH + spacingY
+	browseW := btnW*2 + spacingX
+	browseImg := ghelper.RenderRoundedRect(browseW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bBrowse := &gbase.Button{
-		Label: "", X: browseX, Y: browseY, W: browseW, H: browseH, Image: browseImg,
+		Label: "", X: startX, Y: browseY, W: browseW, H: btnH, Image: browseImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
 	sd.btnBrowseIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bBrowse)
-
 	// Debug toggle (below browse)
-	debugX := startX
-	debugY := browseY + browseH + 18
-	debugImg := ghelper.RenderRoundedRect(themeW, themeH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	debugY := browseY + btnH + spacingY
+	debugImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bDebug := &gbase.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.debug.off"),
-		X:     debugX, Y: debugY, W: themeW, H: themeH, Image: debugImg,
+		X:     startX, Y: debugY, W: btnW, H: btnH, Image: debugImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
 	sd.btnDebugIdx = len(sd.buttons)
@@ -321,8 +371,8 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 
 	// Apply / Back (right-bottom)
 	applyW, applyH := 160, 56
-	applyX := ctx.ConfigWorker.Config.WindowW - applyW - 60
-	applyY := ctx.ConfigWorker.Config.WindowH - applyH - 60
+	applyX := ctx.Config.WindowW - applyW - 60
+	applyY := ctx.Config.WindowH - applyH - 60
 	applyImg := ghelper.RenderRoundedRect(applyW, applyH, 12, ctx.Theme.Accent, ctx.Theme.ButtonStroke, 3)
 	bApply := &gbase.Button{
 		Label: ctx.AssetsWorker.Lang().T("button.save"),
@@ -332,7 +382,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	sd.btnApplyIdx = len(sd.buttons)
 	sd.buttons = append(sd.buttons, bApply)
 
-	backX := ctx.ConfigWorker.Config.WindowW - applyW - 240
+	backX := ctx.Config.WindowW - applyW - 240
 	backY := applyY
 	backImg := ghelper.RenderRoundedRect(applyW, applyH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	bBack := &gbase.Button{
@@ -351,24 +401,54 @@ func (sd *GUISettingsDrawer) refreshButtons(ctx *gctx.GUIGameContext) {
 		stroke := ctx.Theme.ButtonStroke
 
 		// check accent
-		if i == sd.btnThemeLightIdx && sd.themeIndex == 0 {
-			fill = ctx.Theme.Accent
+		if i == sd.btnLangEnIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.lang.en")
+			if sd.langIndex == 0 {
+				fill = ctx.Theme.Accent
+			}
 		}
-		if i == sd.btnThemeDarkIdx && sd.themeIndex == 1 {
-			fill = ctx.Theme.Accent
+		if i == sd.btnLangRuIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.lang.ru")
+			if sd.langIndex == 1 {
+				fill = ctx.Theme.Accent
+			}
 		}
-		if i == sd.btnEngineIntIdx && sd.engineMode == 0 {
-			fill = ctx.Theme.Accent
+		if i == sd.btnThemeLightIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.theme.light")
+			if sd.themeIndex == 0 {
+				fill = ctx.Theme.Accent
+			}
 		}
-		if i == sd.btnEngineUciIdx && sd.engineMode == 1 {
-			fill = ctx.Theme.Accent
+		if i == sd.btnThemeDarkIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.theme.dark")
+			if sd.themeIndex == 1 {
+				fill = ctx.Theme.Accent
+			}
+		}
+		if i == sd.btnEngineIntIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.engine.internal")
+			if sd.engineMode == 0 {
+				fill = ctx.Theme.Accent
+			}
+		}
+		if i == sd.btnEngineUciIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("settings.engine.uci")
+			if sd.engineMode == 1 {
+				fill = ctx.Theme.Accent
+			}
 		}
 		if i == sd.btnBrowseIdx && sd.engineMode == 0 {
 			fill = ctx.Theme.ButtonFill
 		}
+		if i == sd.btnBackIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("button.back")
+		}
+		if i == sd.btnApplyIdx {
+			b.Label = ctx.AssetsWorker.Lang().T("button.save")
+		}
 		// debug button label
 		if i == sd.btnDebugIdx {
-			if ctx.ConfigWorker.Config.Debug {
+			if ctx.Config.Debug {
 				b.Label = ctx.AssetsWorker.Lang().T("settings.debug.on")
 				fill = ctx.Theme.Accent
 			} else {

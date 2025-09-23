@@ -45,12 +45,12 @@ type GUILangWorker struct {
 }
 
 // create object LangWorker and set EN lang
-func NewGUILangWorker(workdir string, cfg *gconf.GUIConfigWorker) (*GUILangWorker, error) {
+func NewGUILangWorker(workdir string, cfg *gconf.Config) (*GUILangWorker, error) {
 	lw := &GUILangWorker{
 		dict:    make(map[string]string),
 		workdir: workdir,
 	}
-	t := LangTypeByString(cfg.Config.Lang)
+	t := LangTypeByString(cfg.Lang)
 	if t == ZZ {
 		return nil, errors.New("unsupported lang")
 	}

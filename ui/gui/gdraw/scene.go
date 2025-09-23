@@ -1,6 +1,7 @@
 package gdraw
 
 import (
+	"evilchess/src/engine/uci"
 	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/ghelper"
 	"image/color"
@@ -49,7 +50,7 @@ func DrawModal(ctx *gctx.GUIGameContext, scale float64, message string, screen *
 
 	// dim background
 	// draw full-screen translucent rectangle
-	overlay := ebiten.NewImage(ctx.ConfigWorker.Config.WindowW, ctx.ConfigWorker.Config.WindowH)
+	overlay := ebiten.NewImage(ctx.Config.WindowW, ctx.Config.WindowH)
 	overlay.Fill(ctx.Theme.ModalBg)
 	screen.DrawImage(overlay, nil)
 
@@ -78,8 +79,8 @@ func DrawModal(ctx *gctx.GUIGameContext, scale float64, message string, screen *
 	if currH < 6 {
 		currH = 6
 	}
-	mx := (ctx.ConfigWorker.Config.WindowW - currW) / 2
-	my := (ctx.ConfigWorker.Config.WindowH - currH) / 2
+	mx := (ctx.Config.WindowW - currW) / 2
+	my := (ctx.Config.WindowH - currH) / 2
 
 	// render a rounded rect for modal
 	modalImg := ghelper.RenderRoundedRect(currW, currH, 16, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
@@ -101,4 +102,13 @@ func DrawModal(ctx *gctx.GUIGameContext, scale float64, message string, screen *
 		screen.DrawImage(okImg, op2)
 		text.Draw(screen, ctx.AssetsWorker.Lang().T("button.ok"), ctx.AssetsWorker.Fonts().PixelLow, okX+36, okY+28, color.White)
 	}
+}
+
+func IsCorrectEngine(ctx *gctx.GUIGameContext) error {
+	e := uci.NewUCIExec(ctx.Logx, ctx.Config.UCIPath)
+	if err := e.Init(); err != nil {
+		return err
+	}
+	defer e.Close()
+	return nil
 }

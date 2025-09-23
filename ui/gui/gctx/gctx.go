@@ -13,17 +13,17 @@ import (
 type GUIGameContext struct {
 	Builder      *src.GameBuilder
 	AssetsWorker *ghelper.GUIAssetsWorker
-	ConfigWorker *gconf.GUIConfigWorker
+	Config       *gconf.Config
 	Theme        gbase.Palette
 	Logx         logx.Logger
 }
 
-func NewGUIGameContext(b *src.GameBuilder, a *ghelper.GUIAssetsWorker, c *gconf.GUIConfigWorker, l logx.Logger) *GUIGameContext {
+func NewGUIGameContext(b *src.GameBuilder, a *ghelper.GUIAssetsWorker, c *gconf.Config, l logx.Logger) *GUIGameContext {
 	return &GUIGameContext{
 		Builder:      b,
 		AssetsWorker: a,
-		ConfigWorker: c,
-		Theme:        gbase.PaletteFromString(c.Config.Theme),
+		Config:       c,
+		Theme:        gbase.PaletteFromString(c.Theme),
 		Logx:         l,
 	}
 }

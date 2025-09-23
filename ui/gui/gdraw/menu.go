@@ -86,8 +86,8 @@ func (md *GUIMenuDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
 			mw := textW + paddingX
 			mh := textH + paddingY
 
-			mx := (ctx.ConfigWorker.Config.WindowW - mw) / 2
-			my := (ctx.ConfigWorker.Config.WindowH - mh) / 2
+			mx := (ctx.Config.WindowW - mw) / 2
+			my := (ctx.Config.WindowH - mh) / 2
 			okW, okH := 120, 44
 			okX := mx + (mw-okW)/2
 			okY := my + mh - 56
@@ -178,7 +178,7 @@ func (md *GUIMenuDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
 	md.drawCrown(screen)
 
 	// debug overlay
-	if ctx.ConfigWorker.Config.Debug {
+	if ctx.Config.Debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
 	}
 }
@@ -189,8 +189,8 @@ func (md *GUIMenuDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	gap := 18
 	n := 4
 	totalH := n*btnH + (n-1)*gap
-	startY := (ctx.ConfigWorker.Config.WindowH - totalH) / 2
-	cx := ctx.ConfigWorker.Config.WindowW / 2
+	startY := (ctx.Config.WindowH - totalH) / 2
+	cx := ctx.Config.WindowW / 2
 	md.buttons = []*gbase.Button{}
 	labels := []string{
 		ctx.AssetsWorker.Lang().T("menu.play"),
@@ -225,12 +225,12 @@ func (md *GUIMenuDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	// language box bottom-left
 	md.langBoxS = 56
 	md.langBoxX = 20
-	md.langBoxY = ctx.ConfigWorker.Config.WindowH - md.langBoxS - 20
+	md.langBoxY = ctx.Config.WindowH - md.langBoxS - 20
 
 	// about box bottom-left
 	md.aboutBoxS = md.langBoxS
 	md.aboutBoxX = md.langBoxX + 70
-	md.aboutBoxY = ctx.ConfigWorker.Config.WindowH - md.aboutBoxS - 20
+	md.aboutBoxY = ctx.Config.WindowH - md.aboutBoxS - 20
 }
 
 func (md *GUIMenuDrawer) refreshButtons(ctx *gctx.GUIGameContext) {
@@ -310,7 +310,7 @@ func (md *GUIMenuDrawer) drawBoxes(ctx *gctx.GUIGameContext, screen *ebiten.Imag
 
 	// version on bottom-right
 	ver := ctx.AssetsWorker.Lang().T("version")
-	text.Draw(screen, ver, ctx.AssetsWorker.Fonts().Normal, ctx.ConfigWorker.Config.WindowW-160, ctx.ConfigWorker.Config.WindowH-24, ctx.Theme.MenuText)
+	text.Draw(screen, ver, ctx.AssetsWorker.Fonts().Normal, ctx.Config.WindowW-160, ctx.Config.WindowH-24, ctx.Theme.MenuText)
 }
 
 func (md *GUIMenuDrawer) drawCrown(screen *ebiten.Image) {

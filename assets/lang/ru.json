@@ -20,17 +20,22 @@
     "settings.theme.light":"Светлая тема",
     "settings.theme.dark":"Темная тема",
     "settings.lang":"Язык",
+    "settings.lang.ru":"Русский",
+    "settings.lang.en":"Английский",
     "settings.engine":"Движок",
     "settings.engine.internal":"Внутренний движок",
     "settings.engine.uci":"Внешний движок (UCI)",
     "settings.engine.no_file":"Исполняемый файл движка не выбран",
     "settings.engine.selecting":"Выбор файла...",
+    "settings.engine.failed":"Выбранный файл не являетя движком",
     "settings.debug":"Режим отладки",
-    "settings.debug.on":"Режим отладки включен",
-    "settings.debug.off":"Режим отладки выключен",
+    "settings.debug.on":"Отладка включена",
+    "settings.debug.off":"Отладка выключена",
+    "settings.save.success":"Настройки успешно сохранены",
+    "settings.save.failed":"Не удалось сохранить настройки",
 
     "__comment_buttons":"text buttons",
     "button.ok":"OK",
     "button.back":"Назад",
-    "button.apply":"Сохранить"
+    "button.save":"Сохранить"
 }

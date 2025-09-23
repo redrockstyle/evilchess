@@ -1,5 +1,4 @@
 {
-
     "version":"EvilChess GUI v1.0.0",
 
     "about.title":"About",
@@ -21,11 +20,14 @@
     "settings.theme.light":"Light Theme",
     "settings.theme.dark":"Dark Theme",
     "settings.lang":"Language",
+    "settings.lang.ru":"Russian",
+    "settings.lang.en":"English",
     "settings.engine":"Engine",
     "settings.engine.internal":"Internal",
     "settings.engine.uci":"External (UCI)",
     "settings.engine.no_file":"No file selected",
     "settings.engine.selecting":"Selecting file...",
+    "settings.engine.failed":"This file is not a chess engine",
     "settings.debug":"Debug Mode",
     "settings.debug.on":"Debug Enabled",
     "settings.debug.off":"Debug Disabled",
