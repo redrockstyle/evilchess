@@ -2,13 +2,79 @@ package gimages
 
 import (
 	"evilchess/src/base"
+	"image"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
-func LoadImageAssets(workdir string) (map[base.Piece]*ebiten.Image, error) {
+func loadIcon(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+func LoadIconAssets(workdir string) (map[int]image.Image, error) {
 	files := []string{
+		// pieces
+		workdir + "/crown16.png", // 0
+		workdir + "/crown32.png", // 1
+		workdir + "/crown48.png", // 2
+		workdir + "/crown60.png", // 3
+	}
+	keys := []int{
+		16,
+		32,
+		48,
+		60,
+	}
+	icons := make(map[int]image.Image)
+	for i := 0; i < 4; i++ {
+		img, err := loadIcon(files[i])
+		if err != nil {
+			return nil, err
+		}
+		icons[keys[i]] = img
+	}
+	return icons, nil
+}
+
+func LoadImageIconAssets(workdir string) (map[int]*ebiten.Image, error) {
+	files := []string{
+		// pieces
+		workdir + "/crown16.png", // 0
+		workdir + "/crown32.png", // 1
+		workdir + "/crown48.png", // 2
+		workdir + "/crown60.png", // 3
+	}
+	keys := []int{
+		16,
+		32,
+		48,
+		60,
+	}
+	icons := make(map[int]*ebiten.Image)
+	for i := 0; i < 4; i++ {
+		img, _, err := ebitenutil.NewImageFromFile(files[i])
+		if err != nil {
+			return nil, err
+		}
+		icons[keys[i]] = img
+	}
+	return icons, nil
+}
+
+func LoadImagePieceAssets(workdir string) (map[base.Piece]*ebiten.Image, error) {
+	files := []string{
+		// pieces
 		workdir + "/wking60.png",   // 0
 		workdir + "/bking60.png",   // 1
 		workdir + "/wqueen60.png",  // 2

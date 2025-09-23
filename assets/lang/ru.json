@@ -1,12 +1,36 @@
 {
-    
+    "version":"EvilChess GUI v1.0.0",
+
+    "about.title":"Автор",
+    "about.body":"Автор: Khazov A.A.\nПроект: EvilChess\nИсходный код: https://github.com/redrockstyle/evilchess\nДата: 2025",
+
     "lang.title":"Язык",
     "lang.type":"RU",
 
-    "__comment1":"для отрисовки меню",
+    "__comment_menu":"для отрисовки меню",
     "menu.play":"Играть",
     "menu.editor":"Редактор доски",
     "menu.analyze":"Анализ игры",
     "menu.settings":"Настройки",
-    "menu.exit":"Выход"
+    "menu.exit":"Выход",
+
+    "__comment_settings":"for draw settings",
+    "settings.title":"Настройки",
+    "settings.theme":"Тема",
+    "settings.theme.light":"Светлая тема",
+    "settings.theme.dark":"Темная тема",
+    "settings.lang":"Язык",
+    "settings.engine":"Движок",
+    "settings.engine.internal":"Внутренний движок",
+    "settings.engine.uci":"Внешний движок (UCI)",
+    "settings.engine.no_file":"Исполняемый файл движка не выбран",
+    "settings.engine.selecting":"Выбор файла...",
+    "settings.debug":"Режим отладки",
+    "settings.debug.on":"Режим отладки включен",
+    "settings.debug.off":"Режим отладки выключен",
+
+    "__comment_buttons":"text buttons",
+    "button.ok":"OK",
+    "button.back":"Назад",
+    "button.apply":"Сохранить"
 }

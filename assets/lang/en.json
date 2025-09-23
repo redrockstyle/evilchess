@@ -2,6 +2,9 @@
 
     "version":"EvilChess GUI v1.0.0",
 
+    "about.title":"About",
+    "about.body":"Author: Khazov A.A.\nProject: EvilChess\nSource: https://github.com/redrockstyle/evilchess\nDate: 2025",
+
     "lang.title":"Lang",
     "lang.type":"EN",
 
@@ -15,12 +18,23 @@
     "__comment_settings":"for draw settings",
     "settings.title":"Settings",
     "settings.theme":"Theme",
+    "settings.theme.light":"Light Theme",
+    "settings.theme.dark":"Dark Theme",
     "settings.lang":"Language",
-    "settings.engine":"Select Engine",
+    "settings.engine":"Engine",
+    "settings.engine.internal":"Internal",
+    "settings.engine.uci":"External (UCI)",
+    "settings.engine.no_file":"No file selected",
+    "settings.engine.selecting":"Selecting file...",
     "settings.debug":"Debug Mode",
+    "settings.debug.on":"Debug Enabled",
+    "settings.debug.off":"Debug Disabled",
+    "settings.save.success":"Settings saved successfully",
+    "settings.save.failed":"Failed to save settings",
 
     "__comment_buttons":"text buttons",
     "button.ok":"OK",
-    "button.back":"Back"
+    "button.back":"Back",
+    "button.save":"Save"
 
 }

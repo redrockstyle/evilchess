@@ -7,6 +7,7 @@ import (
 	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/gdraw"
 	"evilchess/ui/gui/ghelper"
+	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -30,6 +31,12 @@ func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIPro
 }
 
 func (gp *GUIProcessing) Run() error {
+	ebiten.SetWindowIcon([]image.Image{
+		gp.ctx.AssetsWorker.IconNative(16),
+		gp.ctx.AssetsWorker.IconNative(32),
+		gp.ctx.AssetsWorker.IconNative(48),
+		gp.ctx.AssetsWorker.IconNative(60),
+	})
 	ebiten.SetWindowSize(gp.ctx.ConfigWorker.Config.WindowW, gp.ctx.ConfigWorker.Config.WindowH)
 	ebiten.SetWindowTitle("EvilChess")
 	return ebiten.RunGame(gp)
