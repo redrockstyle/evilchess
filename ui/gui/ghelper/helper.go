@@ -1,8 +1,8 @@
 package ghelper
 
 import (
-	"evilchess/ui/gui/gbase"
 	"image/color"
+	"math"
 
 	"github.com/fogleman/gg"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -33,35 +33,40 @@ func PointInRect(px, py, rx, ry, rw, rh int) bool {
 	return px >= rx && px < rx+rw && py >= ry && py < ry+rh
 }
 
-func AnimateMessage(box *gbase.MessageBox) {
-	// basic animation: linear scale and fade (scale 0->1 opening, 1->0 closing)
-	const dt = 1.0 / 60.0
-	const speed = 6.0 // how fast the tween goes
-	if box.Opening {
-		box.Scale += speed * dt
-		if box.Scale >= 1.0 {
-			box.Scale = 1.0
-			box.Animating = false
-		}
-	} else {
-		box.Scale -= speed * dt
-		if box.Scale <= 0.0 {
-			box.Scale = 0.0
-			box.Animating = false
-			box.Open = false
-			// call OnClose if set
-			if box.OnClose != nil {
-				box.OnClose()
-			}
-		}
+func EbitenutilDrawRectStroke(screen *ebiten.Image, x, y, w, h, thickness float64, col color.Color) {
+	if screen == nil || w <= 0 || h <= 0 || thickness <= 0 {
+		return
 	}
-}
 
-func ShowMessage(box *gbase.MessageBox, msg string, onClose func()) {
-	box.Text = msg
-	box.Open = true
-	box.Opening = true
-	box.Animating = true
-	box.Scale = 0.0
-	box.OnClose = onClose
+	maxTh := math.Min(w, h) / 2.0
+	if thickness > maxTh {
+		thickness = maxTh
+	}
+
+	px := ebiten.NewImage(1, 1)
+	px.Fill(col)
+
+	// up
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(w, thickness)
+	op.GeoM.Translate(x, y)
+	screen.DrawImage(px, op)
+
+	// down
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(w, thickness)
+	op.GeoM.Translate(x, y+h-thickness)
+	screen.DrawImage(px, op)
+
+	// left
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(thickness, h-thickness*2)
+	op.GeoM.Translate(x, y+thickness)
+	screen.DrawImage(px, op)
+
+	// right
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(thickness, h-thickness*2)
+	op.GeoM.Translate(x+w-thickness, y+thickness)
+	screen.DrawImage(px, op)
 }

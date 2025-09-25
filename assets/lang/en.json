@@ -34,6 +34,13 @@
     "settings.save.success":"Settings saved successfully",
     "settings.save.failed":"Failed to save settings",
 
+    "__comment_play":"for draw play",
+    "play.newgame":"New Game",
+    "play.flip":"Flip Board",
+    "play.no_engine":"No engine selected",
+    "play.engine_go":"GO Engine!",
+    "play.flip_warning":"Running game",
+
     "__comment_buttons":"text buttons",
     "button.ok":"OK",
     "button.back":"Back",

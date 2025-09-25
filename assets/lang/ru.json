@@ -2,8 +2,8 @@
     "version":"EvilChess GUI v1.0.0",
 
     "about.title":"Автор",
-    "about.body":"Автор: Khazov A.A.\nПроект: EvilChess\nИсходный код: https://github.com/redrockstyle/evilchess\nДата: 2025",
-
+    "about.body":"Author: Khazov A.A.\nProject: EvilChess\nSource: https://github.com/redrockstyle/evilchess\nDate: 2025",
+    
     "lang.title":"Язык",
     "lang.type":"RU",
 
@@ -30,7 +30,7 @@
     "settings.engine.failed":"Выбранный файл не являетя движком",
     "settings.debug":"Режим отладки",
     "settings.debug.on":"Отладка включена",
-    "settings.debug.off":"Отладка выключена",
+    "settings.debug.off":"Отладка отключена",
     "settings.save.success":"Настройки успешно сохранены",
     "settings.save.failed":"Не удалось сохранить настройки",
 

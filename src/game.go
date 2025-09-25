@@ -25,7 +25,7 @@ type GameBuilder struct {
 }
 
 func NewBuilderBoard(logger logx.Logger) *GameBuilder {
-	return &GameBuilder{board: nil, history: history.NewHistory(), status: base.Pass, engine: nil, level: engine.LevelInvalid, logger: logger}
+	return &GameBuilder{board: nil, history: history.NewHistory(), status: base.InvalidGame, engine: nil, level: engine.LevelInvalid, logger: logger}
 }
 
 func (gb *GameBuilder) CreateFromPGN(r io.Reader) (base.GameStatus, error) {
@@ -42,6 +42,10 @@ func (gb *GameBuilder) CreateFromPGN(r io.Reader) (base.GameStatus, error) {
 }
 
 func (gb *GameBuilder) CreateFromFEN(fen string) (base.GameStatus, error) {
+	if gb.history.Len() != 0 { // check recreate
+		gb.history = history.NewHistory()
+	}
+
 	gb.logger.Debugf("create game by FEN: %v", fen)
 	board, err := convfen.ConvertFENToBoard(fen)
 	if err != nil {
@@ -60,6 +64,10 @@ func (gb *GameBuilder) CreateClassic() {
 
 func (gb *GameBuilder) Status() base.GameStatus {
 	return gb.status
+}
+
+func (gb *GameBuilder) IsWhiteToMove() bool {
+	return gb.board.WhiteToMove
 }
 
 func (gb *GameBuilder) Move(move base.Move) base.GameStatus {
@@ -95,7 +103,7 @@ func (gb *GameBuilder) Redo() base.GameStatus {
 }
 
 func (gb *GameBuilder) CurrentMove(number uint) base.GameStatus {
-	gb.logger.Debugf("call undo")
+	gb.logger.Debugf("call currentMove")
 	// pass <some_number>: offset game to current move
 	gb.history.GotoMove(gb.board, number)
 	gb.status = rules.GameStatusOf(gb.board)
@@ -115,6 +123,12 @@ func (gb *GameBuilder) FEN() string {
 func (gb *GameBuilder) PGN(w io.Writer) error {
 	// gb.logger.Debug("get actual PGN")
 	return convpgn.WritePGN(w, *gb.history.ExportPGNGame())
+}
+
+// ---- History ----
+
+func (gb *GameBuilder) CountHalfMoves() int {
+	return gb.history.Len()
 }
 
 // all SAN moves

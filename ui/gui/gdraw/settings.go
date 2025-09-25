@@ -21,9 +21,9 @@ type GUISettingsDrawer struct {
 	engineMode int // 0 = internal, 1 = uci
 
 	// messagebox
-	msg gbase.MessageBox
+	msg *ghelper.MessageBox
 
-	buttons []*gbase.Button
+	buttons []*ghelper.Button
 
 	// index of buttons
 	btnLangEnIdx     int
@@ -65,6 +65,7 @@ func NewGUISettingsDrawer(ctx *gctx.GUIGameContext) *GUISettingsDrawer {
 	}
 	sd.makeLayout(ctx)
 	sd.refreshButtons(ctx)
+	sd.msg = &ghelper.MessageBox{}
 	return sd
 }
 
@@ -86,33 +87,10 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 			// check OK button area in modal coords (we place it centered)
 			// Modal geometry: centered rectangle
 			bounds := text.BoundString(ctx.AssetsWorker.Fonts().Normal, ctx.AssetsWorker.Lang().T("settings.save.success"))
-			textW := bounds.Dx()
-			textH := bounds.Dy()
-
-			paddingX := 64
-			paddingY := 120
-
-			mw := textW + paddingX
-			mh := textH + paddingY
-
-			mx := (ctx.Config.WindowW - mw) / 2
-			my := (ctx.Config.WindowH - mh) / 2
-			okW, okH := 120, 44
-			okX := mx + (mw-okW)/2
-			okY := my + mh - 56
-			mxPos, myPos := ebiten.CursorPosition()
-			if ghelper.PointInRect(mxPos, myPos, okX, okY, okW, okH) {
-				// start closing animation
-				sd.msg.Opening = false
-				sd.msg.Animating = true
-				// call close handler after animation ends
-				if sd.msg.OnClose == nil {
-					sd.msg.OnClose = func() {}
-				}
-			}
+			sd.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
 		}
 		// animate open/close
-		ghelper.AnimateMessage(&sd.msg)
+		sd.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
 
@@ -156,10 +134,12 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 					if err != nil {
 						ctx.Logx.Errorf("error dialog: %v", err)
 					}
-					if err = IsCorrectEngine(ctx); err != nil {
-						ctx.Config.UCIPath = ""
-						ctx.Logx.Error("selected file is not engine")
-						ghelper.ShowMessage(&sd.msg, ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
+					if ctx.Config.UCIPath != "" {
+						if err = IsCorrectEngine(ctx); err != nil {
+							ctx.Config.UCIPath = ""
+							ctx.Logx.Error("selected file is not engine")
+							sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
+						}
 					}
 					sd.browseActive = false
 				}
@@ -178,10 +158,9 @@ func (sd *GUISettingsDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error)
 				ctx.Config.Theme = ctx.Theme.String()
 				err := ctx.Config.Save()
 				if err != nil {
-					ghelper.ShowMessage(&sd.msg, ctx.AssetsWorker.Lang().T("settings.save.failed"), nil)
+					sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.save.failed"), nil)
 				} else {
-					ghelper.ShowMessage(&sd.msg, ctx.AssetsWorker.Lang().T("settings.save.success"), nil)
-
+					sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.save.success"), nil)
 				}
 			case sd.btnBackIdx:
 				return SceneMenu, nil
@@ -259,14 +238,14 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	btnH := 56
 	spacingX := 20 // horizontal
 	spacingY := 18 // vertical
-	sd.buttons = []*gbase.Button{}
+	sd.buttons = []*ghelper.Button{}
 
 	startX := 260
 	startY := 120
 
 	// Lang: en
 	enImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	ben := &gbase.Button{
+	ben := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.lang.en"),
 		X:     startX,
 		Y:     startY,
@@ -279,7 +258,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	sd.buttons = append(sd.buttons, ben)
 	// Lang: ru (to the right)
 	ruImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bru := &gbase.Button{
+	bru := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.lang.ru"),
 		X:     startX + btnW + spacingX,
 		Y:     startY,
@@ -294,7 +273,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	// Theme: Light
 	themeY := startY + btnH + spacingY
 	lightImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bLight := &gbase.Button{
+	bLight := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.theme.light"),
 		X:     startX,
 		Y:     themeY,
@@ -307,7 +286,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	sd.buttons = append(sd.buttons, bLight)
 	// Theme: Dark (to the right)
 	darkImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bDark := &gbase.Button{
+	bDark := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.theme.dark"),
 		X:     startX + btnW + spacingX,
 		Y:     themeY,
@@ -322,7 +301,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	// Engine: internal
 	engineY := themeY + btnH + spacingY
 	intImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bInt := &gbase.Button{
+	bInt := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.engine.internal"),
 		X:     startX,
 		Y:     engineY,
@@ -335,7 +314,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	sd.buttons = append(sd.buttons, bInt)
 	// Engine: external
 	uciImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bUci := &gbase.Button{
+	bUci := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.engine.uci"),
 		X:     startX + btnW + spacingX,
 		Y:     engineY,
@@ -352,7 +331,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	browseY := engineY + btnH + spacingY
 	browseW := btnW*2 + spacingX
 	browseImg := ghelper.RenderRoundedRect(browseW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bBrowse := &gbase.Button{
+	bBrowse := &ghelper.Button{
 		Label: "", X: startX, Y: browseY, W: browseW, H: btnH, Image: browseImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
 	}
@@ -361,7 +340,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	// Debug toggle (below browse)
 	debugY := browseY + btnH + spacingY
 	debugImg := ghelper.RenderRoundedRect(btnW, btnH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bDebug := &gbase.Button{
+	bDebug := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("settings.debug.off"),
 		X:     startX, Y: debugY, W: btnW, H: btnH, Image: debugImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
@@ -374,7 +353,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	applyX := ctx.Config.WindowW - applyW - 60
 	applyY := ctx.Config.WindowH - applyH - 60
 	applyImg := ghelper.RenderRoundedRect(applyW, applyH, 12, ctx.Theme.Accent, ctx.Theme.ButtonStroke, 3)
-	bApply := &gbase.Button{
+	bApply := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("button.save"),
 		X:     applyX, Y: applyY, W: applyW, H: applyH, Image: applyImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,
@@ -385,7 +364,7 @@ func (sd *GUISettingsDrawer) makeLayout(ctx *gctx.GUIGameContext) {
 	backX := ctx.Config.WindowW - applyW - 240
 	backY := applyY
 	backImg := ghelper.RenderRoundedRect(applyW, applyH, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
-	bBack := &gbase.Button{
+	bBack := &ghelper.Button{
 		Label: ctx.AssetsWorker.Lang().T("button.back"),
 		X:     backX, Y: backY, W: applyW, H: applyH, Image: backImg,
 		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 8.0,

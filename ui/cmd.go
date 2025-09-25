@@ -103,10 +103,12 @@ func RunEvilChess() error {
 							return nil
 						}
 					} else {
-						// gb.InitEngine(engine.LevelLast, myengine.NewEvilEngine())
+						// for my engine
+						// gb.SetEngineWorker(myengine.NewEvilEngine())
+						// for UCI engine
 						gb.SetEngineWorker(uci.NewUCIExec(logger, "materials/engine/stockfish/stockfish"))
+						// set level
 						gb.SetEngineLevel(engine.LevelFive)
-						// gb.InitEngine(engine.LevelThree, uci.NewStockfishEngine(logger, "stockfish"))
 						gb.CreateClassic()
 					}
 

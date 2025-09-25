@@ -13,7 +13,7 @@ import (
 )
 
 type GUIProcessing struct {
-	sc  gdraw.Scene
+	mgr *gdraw.SceneManager
 	ctx *gctx.GUIGameContext
 }
 
@@ -27,10 +27,13 @@ func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIPro
 		return nil, err
 	}
 	ctx := gctx.NewGUIGameContext(b, as, cfg, logx)
-	return &GUIProcessing{sc: gdraw.NewGUIMenuDrawer(ctx), ctx: ctx}, nil
+	mgr := gdraw.NewSceneManager(ctx)
+	return &GUIProcessing{mgr: mgr, ctx: ctx}, nil
 }
 
 func (gp *GUIProcessing) Run() error {
+	// ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	// ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowIcon([]image.Image{
 		gp.ctx.AssetsWorker.IconNative(16),
 		gp.ctx.AssetsWorker.IconNative(32),
@@ -43,18 +46,22 @@ func (gp *GUIProcessing) Run() error {
 }
 
 func (gp *GUIProcessing) Update() error {
-	t, err := gp.sc.Update(gp.ctx)
-	if err != nil {
-		return err
-	}
-	gp.sc = t.ToScene(gp.sc, gp.ctx)
-	return nil
+	// t, err := gp.sc.Update(gp.ctx)
+	// if err != nil {
+	// 	return err
+	// }
+	// gp.sc = t.ToScene(gp.sc, gp.ctx)
+	// return nil
+	return gp.mgr.Update()
 }
 
 func (gp *GUIProcessing) Draw(screen *ebiten.Image) {
-	gp.sc.Draw(gp.ctx, screen)
+	// gp.sc.Draw(gp.ctx, screen)
+	gp.mgr.Draw(screen)
 }
 
 func (gp *GUIProcessing) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return gp.ctx.Config.WindowW, gp.ctx.Config.WindowH
+	// gp.ctx.Config.WindowW = outsideWidth
+	// gp.ctx.Config.WindowH = outsideHeight
+	return outsideWidth, outsideHeight
 }
