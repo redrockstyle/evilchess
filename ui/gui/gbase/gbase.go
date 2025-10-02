@@ -26,6 +26,19 @@ const (
 	WindowH int = 700
 )
 
+// -- GUI Chess Clock --
+
+type GUIChessClock int
+
+const (
+	ClockNull GUIChessClock = iota
+	Clock1Min
+	Clock3Min
+	Clock5Min
+	Clock10Min
+	Clock15Min
+)
+
 // ---- Styles (palettes) ----
 
 type Palette struct {

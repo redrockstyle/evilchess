@@ -7,24 +7,36 @@ import (
 )
 
 type Config struct {
-	Theme   string `json:"theme"`    // light/dark
-	Engine  string `json:"engine"`   // internal/external
-	Lang    string `json:"language"` // en/ru
-	UCIPath string `json:"uci_path"` // path to external engine
-	WindowH int    `json:"window_h"` //
-	WindowW int    `json:"window_w"` //
-	Debug   bool   `json:"debug"`    // true/false
+	Theme     string `json:"theme"`           // light/dark
+	Engine    string `json:"engine"`          // internal/external
+	Lang      string `json:"language"`        // en/ru
+	UCIPath   string `json:"uci_path"`        // path to external engine
+	Strength  int    `json:"engine_strength"` // strength engine
+	UseClock  bool   `json:"use_clock"`       // true/false
+	UseEngine bool   `json:"use_engine"`      // true/false
+	Clock     int    `json:"clock"`           // chess clock time
+	PlayAs    string `json:"play_as"`         // white/random/black
+	Training  bool   `json:"training_mode"`   // true/false
+	WindowH   int    `json:"window_h"`        // window height
+	WindowW   int    `json:"window_w"`        // window width
+	Debug     bool   `json:"debug"`           // true/false
 }
 
 func defaultConfig() Config {
 	return Config{
-		Theme:   "light",
-		Engine:  "internal",
-		Lang:    "en",
-		UCIPath: "",
-		WindowH: 800,
-		WindowW: 1000,
-		Debug:   false,
+		Theme:     "light",
+		Engine:    "internal",
+		Lang:      "en",
+		UCIPath:   "",
+		Strength:  4,
+		UseClock:  true,
+		UseEngine: true,
+		Clock:     3,
+		PlayAs:    "random",
+		Training:  false,
+		WindowH:   800,
+		WindowW:   1000,
+		Debug:     false,
 	}
 }
 
@@ -80,6 +92,15 @@ func correctableConfig(c *Config) {
 	}
 	if c.Lang != "en" && c.Lang != "ru" {
 		c.Lang = "en"
+	}
+	if c.Strength < 0 || c.Strength > 10 {
+		c.Strength = def.Strength
+	}
+	if c.Clock < 0 || c.Clock > 60 {
+		c.Clock = def.Clock
+	}
+	if c.PlayAs != "white" && c.PlayAs != "random" && c.PlayAs != "black" {
+		c.PlayAs = def.PlayAs
 	}
 	if c.WindowH < def.WindowH || c.WindowW < def.WindowW {
 		c.WindowH = def.WindowH

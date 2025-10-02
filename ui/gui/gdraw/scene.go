@@ -2,7 +2,6 @@ package gdraw
 
 import (
 	"evilchess/src/engine/uci"
-	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/ghelper"
 	"image/color"
 	"time"
@@ -14,8 +13,8 @@ import (
 // ---- Scene ----
 
 type Scene interface {
-	Update(ctx *gctx.GUIGameContext) (SceneType, error)
-	Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image)
+	Update(ctx *ghelper.GUIGameContext) (SceneType, error)
+	Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 }
 
 type SceneType int
@@ -23,18 +22,21 @@ type SceneType int
 const (
 	SceneMenu SceneType = iota
 	ScenePlay
+	ScenePlayMenu
 	SceneEditor
 	SceneAnalyzer
 	SceneSettings
 	SceneNotChanged
 )
 
-func (t SceneType) ToScene(s Scene, ctx *gctx.GUIGameContext) Scene {
+func (t SceneType) ToScene(s Scene, ctx *ghelper.GUIGameContext) Scene {
 	switch t {
 	case SceneMenu:
 		s = NewGUIMenuDrawer(ctx)
 	case ScenePlay:
 		s = NewGUIPlayDrawer(ctx)
+	case ScenePlayMenu:
+		s = NewGUIPlayMenuDrawer(ctx)
 	case SceneEditor:
 		s = NewGUIEditDrawer(ctx)
 	case SceneAnalyzer:
@@ -47,7 +49,7 @@ func (t SceneType) ToScene(s Scene, ctx *gctx.GUIGameContext) Scene {
 	return s
 }
 
-func DrawModal(ctx *gctx.GUIGameContext, scale float64, message string, screen *ebiten.Image) {
+func DrawModal(ctx *ghelper.GUIGameContext, scale float64, message string, screen *ebiten.Image) {
 
 	// dim background
 	// draw full-screen translucent rectangle
@@ -105,7 +107,7 @@ func DrawModal(ctx *gctx.GUIGameContext, scale float64, message string, screen *
 	}
 }
 
-func IsCorrectEngine(ctx *gctx.GUIGameContext) error {
+func IsCorrectEngine(ctx *ghelper.GUIGameContext) error {
 	e := uci.NewUCIExec(ctx.Logx, ctx.Config.UCIPath)
 	if err := e.Init(); err != nil {
 		return err
@@ -138,7 +140,7 @@ type Transition struct {
 }
 
 type SceneManager struct {
-	ctx    *gctx.GUIGameContext
+	ctx    *ghelper.GUIGameContext
 	cur    Scene
 	trans  *Transition
 	last   time.Time
@@ -148,7 +150,7 @@ type SceneManager struct {
 }
 
 // init and create menu scene
-func NewSceneManager(ctx *gctx.GUIGameContext) *SceneManager {
+func NewSceneManager(ctx *ghelper.GUIGameContext) *SceneManager {
 	sm := &SceneManager{
 		ctx:    ctx,
 		last:   time.Now(),

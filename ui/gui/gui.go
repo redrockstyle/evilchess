@@ -4,7 +4,6 @@ import (
 	"evilchess/src"
 	"evilchess/src/logx"
 	"evilchess/ui/gui/gbase/gconf"
-	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/gdraw"
 	"evilchess/ui/gui/ghelper"
 	"image"
@@ -14,7 +13,7 @@ import (
 
 type GUIProcessing struct {
 	mgr *gdraw.SceneManager
-	ctx *gctx.GUIGameContext
+	ctx *ghelper.GUIGameContext
 }
 
 func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIProcessing, error) {
@@ -26,7 +25,7 @@ func NewGUI(b *src.GameBuilder, rootDirAssets string, logx logx.Logger) (*GUIPro
 	if err != nil {
 		return nil, err
 	}
-	ctx := gctx.NewGUIGameContext(b, as, cfg, logx)
+	ctx := ghelper.NewGUIGameContext(b, as, cfg, logx)
 	mgr := gdraw.NewSceneManager(ctx)
 	return &GUIProcessing{mgr: mgr, ctx: ctx}, nil
 }

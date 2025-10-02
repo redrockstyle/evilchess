@@ -2,7 +2,6 @@ package gdraw
 
 import (
 	"evilchess/ui/gui/gbase"
-	"evilchess/ui/gui/gctx"
 	"evilchess/ui/gui/ghelper"
 	"evilchess/ui/gui/ghelper/glang"
 	"fmt"
@@ -16,13 +15,14 @@ import (
 )
 
 type GUIMenuDrawer struct {
-	buttons []*ghelper.Button
-
-	// messagebox
-	msg *ghelper.MessageBox
-
-	// language selector square bottom-left
-	langBoxX, langBoxY, langBoxS int
+	msg        *ghelper.MessageBox
+	buttons    []*ghelper.Button
+	btnPlayIdx int
+	btnEditIdx int
+	btnStgsIdx int
+	btnExitIdx int
+	btnLangIdx int
+	btnInfoIdx int
 
 	// click tracking
 	prevMouseDown bool
@@ -35,27 +35,39 @@ type GUIMenuDrawer struct {
 	shadowImg        *ebiten.Image
 
 	// for animation
-	prevTime time.Time
+	lastTick time.Time
 }
 
-func NewGUIMenuDrawer(ctx *gctx.GUIGameContext) *GUIMenuDrawer {
-	md := &GUIMenuDrawer{}
-	md.prevTime = time.Now()
-	md.makeLayout(ctx)
+func NewGUIMenuDrawer(ctx *ghelper.GUIGameContext) *GUIMenuDrawer {
+	md := &GUIMenuDrawer{lastTick: time.Now()}
+	// md.makeLayout(ctx)
+
+	// buttons
+	md.buttons = []*ghelper.Button{}
+	btnW, btnH := 320, 64
+	gap := 18
+	n := 4
+	totalH := n*btnH + (n-1)*gap
+	startY := (ctx.Config.WindowH - totalH) / 2
+	cx := ctx.Config.WindowW / 2
+	md.btnPlayIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.play"), cx-btnW/2, startY, btnW, btnH, md.buttons)
+	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.editor"), cx-btnW/2, startY+(btnH+gap), btnW, btnH, md.buttons)
+	md.btnStgsIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.settings"), cx-btnW/2, startY+2*(btnH+gap), btnW, btnH, md.buttons)
+	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.exit"), cx-btnW/2, startY+3*(btnH+gap), btnW, btnH, md.buttons)
+	// left-down buttons
+	md.btnLangIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("lang.type"), 20, ctx.Config.WindowH-76, 56, 56, md.buttons)
+	md.btnInfoIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("about.title"), 90, ctx.Config.WindowH-76, 56, 56, md.buttons)
+
+	md.msg = &ghelper.MessageBox{}
 	md.initCrown(ctx.AssetsWorker.Icon(60), 2)
 	return md
 }
 
-func (md *GUIMenuDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
-	// keyboard: toggle palette for demo
-	if ebiten.IsKeyPressed(ebiten.KeyTab) {
-		if ctx.Theme == gbase.LightPalette {
-			ctx.Theme = gbase.DarkPalette
-		} else {
-			ctx.Theme = gbase.LightPalette
-		}
-		md.refreshButtons(ctx)
-	}
+func (md *GUIMenuDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) {
+	// for animation
+	now := time.Now()
+	dt := now.Sub(md.lastTick).Seconds()
+	md.lastTick = now
 
 	// check mouse just clicked
 	mx, my := ebiten.CursorPosition()
@@ -63,10 +75,6 @@ func (md *GUIMenuDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
 	justClicked := mouseDown && !md.prevMouseDown
 	justReleased := !mouseDown && md.prevMouseDown
 	md.prevMouseDown = mouseDown
-
-	now := time.Now()
-	dt := now.Sub(md.prevTime).Seconds()
-	md.prevTime = now
 
 	// if message box open -> handle clicks on it
 	if md.msg.Open {
@@ -92,14 +100,24 @@ func (md *GUIMenuDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
 				if ghelper.PointInRect(mx, my, b.X, b.Y, b.W, b.H) {
 					ctx.Logx.Infof("%s (%d) clicked", b.Label, i)
 					switch i {
-					case 0: // menu.play
-						return ScenePlay, nil
-					case 1: // menu.editor
+					case md.btnPlayIdx:
+						return ScenePlayMenu, nil
+					case md.btnExitIdx:
 						return SceneEditor, nil
-					case 2: // menu.settings
+					case md.btnStgsIdx:
 						return SceneSettings, nil
-					case 3: // menu.exit
+					case md.btnExitIdx:
 						return SceneNotChanged, gbase.ErrExit
+					case md.btnLangIdx:
+						if ctx.AssetsWorker.Lang().GetLang() == glang.EN {
+							ctx.AssetsWorker.Lang().SetLang(glang.RU)
+						} else {
+							ctx.AssetsWorker.Lang().SetLang(glang.EN)
+						}
+						md.refreshButtons(ctx)
+						return SceneNotChanged, nil
+					case md.btnInfoIdx:
+						md.msg.ShowMessage(ctx.AssetsWorker.Lang().T("about.body"), nil)
 					}
 					return SceneNotChanged, nil
 				}
@@ -108,38 +126,24 @@ func (md *GUIMenuDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
 		}
 	}
 
-	if justClicked {
-		// language box clickа
-		if ghelper.PointInRect(mx, my, md.langBoxX, md.langBoxY, md.langBoxS, md.langBoxS) {
-			if ctx.AssetsWorker.Lang().GetLang() == glang.EN {
-				ctx.AssetsWorker.Lang().SetLang(glang.RU)
-			} else {
-				ctx.AssetsWorker.Lang().SetLang(glang.EN)
-			}
-			md.refreshButtons(ctx)
-			return SceneNotChanged, nil
-		}
-		if md.msg.ShowMessageInRect(mx, my) {
-			return SceneNotChanged, nil
-		}
-	}
-
 	// update crown
-	// now := time.Now()
-	// dt := now.Sub(md.prevTime).Seconds()
-	// md.prevTime = now
 	md.crownElapsed += dt
 	// md.crownElapsed += 0.5 / 60.0
 
 	return SceneNotChanged, nil
 }
 
-func (md *GUIMenuDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
-	// clear background
+func (md *GUIMenuDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image) {
+	// background
 	screen.Fill(ctx.Theme.Bg)
 
-	md.drawButtuns(ctx, screen)
-	md.drawBoxes(ctx, screen)
+	for i, b := range md.buttons {
+		face := ctx.AssetsWorker.Fonts().Pixel
+		if i == md.btnLangIdx || i == md.btnInfoIdx {
+			face = ctx.AssetsWorker.Fonts().PixelLow
+		}
+		b.DrawAnimated(screen, face, ctx.Theme)
+	}
 
 	// if message box open -> draw overlay and modal
 	if md.msg.Open || md.msg.Animating {
@@ -148,84 +152,26 @@ func (md *GUIMenuDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
 
 	md.drawCrown(screen)
 
+	text.Draw(screen, ctx.AssetsWorker.Lang().T("version"), ctx.AssetsWorker.Fonts().Normal, ctx.Config.WindowW-160, ctx.Config.WindowH-24, ctx.Theme.MenuText)
 	// debug overlay
 	if ctx.Config.Debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
 	}
 }
 
-func (md *GUIMenuDrawer) makeLayout(ctx *gctx.GUIGameContext) {
-	// center buttons vertically
-	btnW, btnH := 320, 64
-	gap := 18
-	n := 4
-	totalH := n*btnH + (n-1)*gap
-	startY := (ctx.Config.WindowH - totalH) / 2
-	cx := ctx.Config.WindowW / 2
-	md.buttons = []*ghelper.Button{}
-	labels := []string{
-		ctx.AssetsWorker.Lang().T("menu.play"),
-		ctx.AssetsWorker.Lang().T("menu.editor"),
-		ctx.AssetsWorker.Lang().T("menu.settings"),
-		ctx.AssetsWorker.Lang().T("menu.exit"),
-	}
-	for i, lab := range labels {
-		x := cx - btnW/2
-		y := startY + i*(btnH+gap)
-		b := &ghelper.Button{
-			Label: lab,
-			X:     x, Y: y, W: btnW, H: btnH,
-		}
-
-		b.Scale = 1.0
-		b.TargetScale = 1.0
-		b.OffsetY = 0
-		b.TargetOffsetY = 0
-		b.AnimSpeed = 10.0
-
-		// pre-render button image
-		b.Image = ghelper.RenderRoundedRect(
-			btnW, btnH, 16,
-			ctx.Theme.ButtonFill,
-			ctx.Theme.ButtonStroke,
-			3,
-		)
-		md.buttons = append(md.buttons, b)
-	}
-
-	// language box bottom-left
-	md.langBoxS = 56
-	md.langBoxX = 20
-	md.langBoxY = ctx.Config.WindowH - md.langBoxS - 20
-
-	// about box bottom-left
-	md.msg = &ghelper.MessageBox{
-		Label: ctx.AssetsWorker.Lang().T("about.body"),
-		X:     md.langBoxX + 70,
-		Y:     ctx.Config.WindowH - md.langBoxS - 20,
-		W:     md.langBoxS,
-		H:     md.langBoxS,
-	}
-}
-
-func (md *GUIMenuDrawer) refreshButtons(ctx *gctx.GUIGameContext) {
+func (md *GUIMenuDrawer) refreshButtons(ctx *ghelper.GUIGameContext) {
 	// update labels and re-render button images if needed
 	labels := []string{
 		ctx.AssetsWorker.Lang().T("menu.play"),
 		ctx.AssetsWorker.Lang().T("menu.editor"),
 		ctx.AssetsWorker.Lang().T("menu.settings"),
 		ctx.AssetsWorker.Lang().T("menu.exit"),
+		ctx.AssetsWorker.Lang().T("lang.type"),
+		ctx.AssetsWorker.Lang().T("about.title"),
 	}
 	for i := range md.buttons {
 		md.buttons[i].Label = labels[i]
-
-		md.buttons[i].Image = ghelper.RenderRoundedRect(
-			md.buttons[i].W, md.buttons[i].H,
-			16,                     // radius
-			ctx.Theme.ButtonFill,   // <- new fill
-			ctx.Theme.ButtonStroke, // <- new stroke
-			3,                      // strokeWidth
-		)
+		md.buttons[i].Image = ghelper.RenderRoundedRect(md.buttons[i].W, md.buttons[i].H, 16, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 	}
 }
 
@@ -237,55 +183,6 @@ func (md *GUIMenuDrawer) initCrown(img *ebiten.Image, scale int) {
 	md.crownBaseOffsetY = -100.0 // -36..-80
 	md.shadowImg = nil           // first render Draw
 	md.crownElapsed = 0
-}
-
-func (md *GUIMenuDrawer) drawButtuns(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
-	// draw centered menu buttons
-	for _, b := range md.buttons {
-		b.DrawAnimated(screen, ctx.AssetsWorker.Fonts().Pixel, ctx.Theme)
-	}
-	// for _, b := range md.buttons {
-	// 	b.DrawAnimated(screen, ctx.AssetsWorker.Fonts().Bold, ctx.Theme)
-	// 	op := &ebiten.DrawImageOptions{}
-	// 	op.GeoM.Translate(float64(b.X), float64(b.Y))
-	// 	screen.DrawImage(b.Image, op)
-
-	// 	// button label (text) centered
-	// 	textX := b.X + b.W/2 - len(b.Label)*4
-	// 	textY := b.Y + b.H/2 + 6
-	// 	text.Draw(screen, b.Label, ctx.AssetsWorker.Fonts().Normal, textX, textY, ctx.Theme.ButtonText)
-
-	// 	// outline (for strong contour) — draw thin stroke rectangle slightly larger
-	// 	// ctx.Helper.EbitenutilDrawRectStroke(screen, float64(b.X), float64(b.Y), float64(b.W), float64(b.H), 2, md.pal.ButtonStroke)
-	// }
-}
-
-func (md *GUIMenuDrawer) drawBoxes(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
-	// language box bottom-left (square)
-	// square background
-	langImg := ghelper.RenderRoundedRect(md.langBoxS, md.langBoxS, 8, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 2)
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(md.langBoxX), float64(md.langBoxY))
-	op.Filter = ebiten.FilterNearest
-	screen.DrawImage(langImg, op)
-	text.Draw(screen, ctx.AssetsWorker.Lang().T("lang.type"), ctx.AssetsWorker.Fonts().Normal, md.langBoxX+16, md.langBoxY+md.langBoxS/2+4, ctx.Theme.ButtonText)
-	// small label
-	// text.Draw(screen, ctx.AssetsWorker.Lang().T("lang.title"), basicfont.Face7x13, md.langBoxX+6, md.langBoxY-6, ctx.Theme.MenuText)
-
-	// language box bottom-left (square)
-	// square background
-	aboutImg := ghelper.RenderRoundedRect(md.msg.W, md.msg.H, 8, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 2)
-	op = &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(md.msg.X), float64(md.msg.Y))
-	op.Filter = ebiten.FilterNearest
-	screen.DrawImage(aboutImg, op)
-	text.Draw(screen, ctx.AssetsWorker.Lang().T("about.title"), ctx.AssetsWorker.Fonts().Normal, md.msg.X+16, md.msg.Y+md.msg.W/2+4, ctx.Theme.ButtonText)
-	// small label
-	// text.Draw(screen, ctx.AssetsWorker.Lang().T("lang.title"), basicfont.Face7x13, md.aboutBoxX+6, md.aboutBoxY-6, ctx.Theme.MenuText)
-
-	// version on bottom-right
-	ver := ctx.AssetsWorker.Lang().T("version")
-	text.Draw(screen, ver, ctx.AssetsWorker.Fonts().Normal, ctx.Config.WindowW-160, ctx.Config.WindowH-24, ctx.Theme.MenuText)
 }
 
 func (md *GUIMenuDrawer) drawCrown(screen *ebiten.Image) {

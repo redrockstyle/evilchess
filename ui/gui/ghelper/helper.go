@@ -70,3 +70,15 @@ func EbitenutilDrawRectStroke(screen *ebiten.Image, x, y, w, h, thickness float6
 	op.GeoM.Translate(x+w-thickness, y+thickness)
 	screen.DrawImage(px, op)
 }
+
+func AppendButton(ctx *GUIGameContext, label string, x, y, w, h int, buttons []*Button) (int, []*Button) {
+	img := RenderRoundedRect(w, h, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	b := &Button{
+		Label: label,
+		X:     x, Y: y, W: w, H: h,
+		Image: img,
+		Scale: 1.0, TargetScale: 1.0, OffsetY: 0, TargetOffsetY: 0, AnimSpeed: 10.0,
+	}
+	idx := len(buttons)
+	return idx, append(buttons, b)
+}

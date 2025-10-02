@@ -2,7 +2,7 @@ package gdraw
 
 import (
 	"evilchess/ui/gui/gbase"
-	"evilchess/ui/gui/gctx"
+	"evilchess/ui/gui/ghelper"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -10,14 +10,14 @@ import (
 type GUIAnalyzeDrawer struct {
 }
 
-func NewGUIAnalyzeDrawer(ctx *gctx.GUIGameContext) *GUIAnalyzeDrawer {
+func NewGUIAnalyzeDrawer(ctx *ghelper.GUIGameContext) *GUIAnalyzeDrawer {
 	return &GUIAnalyzeDrawer{}
 }
 
-func (pd GUIAnalyzeDrawer) Update(ctx *gctx.GUIGameContext) (SceneType, error) {
+func (pd GUIAnalyzeDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) {
 	return SceneNotChanged, gbase.ErrExit
 }
 
-func (pd GUIAnalyzeDrawer) Draw(ctx *gctx.GUIGameContext, screen *ebiten.Image) {
+func (pd GUIAnalyzeDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image) {
 	return
 }

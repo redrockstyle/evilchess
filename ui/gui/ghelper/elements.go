@@ -2,6 +2,8 @@ package ghelper
 
 import (
 	"evilchess/ui/gui/gbase"
+	"fmt"
+	"image/color"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -198,4 +200,285 @@ func (mb *MessageBox) CollapseMessageInRect(windW, windH, textW, textH int) {
 			mb.OnClose = func() {}
 		}
 	}
+}
+
+// --- Number Wheel ---
+
+type NumberWheel struct {
+	X, Y     int // top-left of widget
+	W, H     int // size of widget box
+	Min, Max int // inclusive range
+	Step     int // шаг (обычно 1)
+
+	// визуальные настройки
+	ItemH        int     // высота одного значения (px)
+	VisibleCount int     // сколько элементов показываем (нечетное: 3,5,7...)
+	CenterScale  float64 // масштаб центрального текста
+	SideScale    float64 // масштаб соседних
+	SideAlpha    float64 // альфа соседних
+	Title        string  // optional title drawn above
+
+	// internal state
+	value     int     // текущий выбранный (целое значение)
+	offset    float64 // плавный оффсет в px (0 = идеальное центрирование на value)
+	velocity  float64 // скорость для инерции (px/sec)
+	hover     bool
+	onChange  func(int)
+	allowWrap bool        // если true — после max идёт min
+	fontFace  interface{} // expect font.Face but keep generic type to avoid import cycle; pass actual face as interface{}
+}
+
+// use: ctx.AssetsWorker.Fonts().Pixel
+// use: visibleCount % 2 == 0
+func NewNumberWheel(x, y, w, h, min, max, step int, initial int, visibleCount int, fontFace interface{}, title string) *NumberWheel {
+	if visibleCount%2 == 0 {
+		visibleCount = 3
+	}
+	itemH := h / visibleCount
+	if itemH < 28 {
+		itemH = 36
+	}
+	nw := &NumberWheel{
+		X: x, Y: y, W: w, H: h,
+		Min: min, Max: max, Step: step,
+		ItemH: itemH, VisibleCount: visibleCount,
+		CenterScale: 1.6, SideScale: 0.9, SideAlpha: 0.55,
+		value:     clamp(initial, min, max),
+		offset:    0,
+		velocity:  0,
+		allowWrap: false,
+		fontFace:  fontFace,
+		Title:     title,
+	}
+	return nw
+}
+
+// SetOnChange registers callback
+func (nw *NumberWheel) SetOnChange(fn func(int)) {
+	nw.onChange = fn
+}
+
+func (nw *NumberWheel) AllowWrap(v bool) {
+	nw.allowWrap = v
+}
+
+func (nw *NumberWheel) Value() int { return nw.value }
+
+func (nw *NumberWheel) SetValue(v int) {
+	v = clamp(v, nw.Min, nw.Max)
+	if nw.value != v {
+		nw.value = v
+		if nw.onChange != nil {
+			nw.onChange(nw.value)
+		}
+	}
+	nw.offset = 0
+	nw.velocity = 0
+}
+
+func (nw *NumberWheel) Update(ctx *GUIGameContext) {
+	// mouse hover detection
+	mx, my := ebiten.CursorPosition()
+	nw.hover = pointInRect(mx, my, nw.X, nw.Y, nw.W, nw.H)
+
+	// wheel delta (ebiten.Wheel())
+	_, dy := ebiten.Wheel()
+	if nw.hover && dy != 0 {
+		step := -int(math.Copysign(1, dy)) // normalize
+		nw.velocity = float64(step) * float64(nw.ItemH) * 8.0
+	}
+
+	// keyboard support when hovered: up/down
+	if nw.hover {
+		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+			nw.applySteps(-1)
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+			nw.applySteps(1)
+		}
+	}
+
+	// apply physics: velocity -> offset
+	// dt approximated by 1/TPS
+	dt := 1.0 / math.Max(1.0, ebiten.ActualTPS())
+	// integrate velocity
+	nw.offset += nw.velocity * dt
+	// damping
+	nw.velocity *= math.Pow(0.001, dt)
+
+	// if offset passed threshold of ItemH/2 -> commit step(s)
+	for nw.offset >= float64(nw.ItemH)/2.0 {
+		nw.commitStep(-1) // negative because offset positive means user moved wheel down
+		nw.offset -= float64(nw.ItemH)
+	}
+	for nw.offset <= -float64(nw.ItemH)/2.0 {
+		nw.commitStep(1)
+		nw.offset += float64(nw.ItemH)
+	}
+
+	// gentle snap to zero when tiny
+	if math.Abs(nw.velocity) < 0.1 {
+		target := 0.0
+		// offset → 0
+		nw.offset += (target - nw.offset) * 0.2
+		if math.Abs(nw.offset) < 0.5 {
+			// stoping
+			nearest := math.Round(nw.offset / float64(nw.ItemH))
+			nw.applySteps(int(nearest))
+			nw.offset = 0
+		}
+	}
+}
+
+func (nw *NumberWheel) Draw(ctx *GUIGameContext, screen *ebiten.Image) {
+	// background box
+	bg := RenderRoundedRect(nw.W, nw.H, 10, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(nw.X), float64(nw.Y))
+	screen.DrawImage(bg, op)
+
+	// title if any
+	if nw.Title != "" {
+		// draw title above
+		text.Draw(screen, ctx.AssetsWorker.Lang().T(nw.Title), ctx.AssetsWorker.Fonts().Pixel, nw.X+8, nw.Y-2, ctx.Theme.MenuText)
+	}
+
+	// central coords
+	centerX := nw.X + nw.W/2
+	centerY := nw.Y + nw.H/2
+
+	// how many items to draw above/below
+	half := nw.VisibleCount / 2
+
+	// draw items: from -half .. +half
+	for i := -half; i <= half; i++ {
+		// compute index relative to current value considering offset
+		// offset shifts items by fractional number of items (offset / ItemH)
+		pos := float64(i)*float64(nw.ItemH) + nw.offset
+		// screen position
+		y := float64(centerY) + pos
+
+		// index value for this row
+		val := nw.value + i
+		if nw.allowWrap {
+			val = wrapInt(val, nw.Min, nw.Max)
+		}
+
+		// if val out of range and not wrap -> skip draw
+		if val < nw.Min || val > nw.Max {
+			continue
+		}
+
+		// visual scale/alpha depending on distance from center
+		dist := math.Abs(float64(i) + nw.offset/float64(nw.ItemH))
+		// scale := nw.SideScale + (nw.CenterScale-nw.SideScale)*math.Max(0.0, 1.0-math.Min(dist, 1.0))
+		alpha := 1.0 - (1.0-nw.SideAlpha)*math.Min(dist, 1.0)
+
+		// choose face and color
+		face := ctx.AssetsWorker.Fonts().Pixel
+		col := ctx.Theme.MenuText
+		// modulate alpha into color (text.Draw doesn't accept alpha directly), so use ColorM with small image
+		// Simpler: choose darker color for side elements by linear interpolation
+		col = lerpColor(col, ctx.Theme.Bg, 1.0-alpha) // blend with background to reduce visibility
+
+		// draw label as centered
+		lbl := fmt.Sprintf("%02d", val)
+		// compute text metrics
+		// use text.BoundString to measure width for centering
+		b := text.BoundString(face, lbl)
+		tw := b.Dx()
+		th := b.Dy()
+
+		// prepare options to scale text by scale: draw into offscreen? simpler: change font size externally.
+		// Here we approximate scaling by offsetting a bit and drawing normally (Pixel font looks OK).
+		tx := int(float64(centerX) - float64(tw)/2.0)
+		ty := int(y + float64(th)/2.0)
+
+		// draw with color
+		text.Draw(screen, lbl, face, tx, ty, col)
+	}
+
+	// border highlight when hover
+	if nw.hover {
+		EbitenutilDrawRectStroke(screen, float64(nw.X)+1, float64(nw.Y)+1, float64(nw.W)-2, float64(nw.H)-2, 2, ctx.Theme.Accent)
+	}
+}
+
+func (nw *NumberWheel) applySteps(steps int) {
+	for s := 0; s < absInt(steps); s++ {
+		if steps > 0 {
+			nw.commitStep(1)
+		} else if steps < 0 {
+			nw.commitStep(-1)
+		}
+	}
+}
+
+func (nw *NumberWheel) commitStep(dir int) {
+	newVal := nw.value + dir*nw.Step
+	if nw.allowWrap {
+		newVal = wrapInt(newVal, nw.Min, nw.Max)
+	} else {
+		if newVal < nw.Min {
+			newVal = nw.Min
+		}
+		if newVal > nw.Max {
+			newVal = nw.Max
+		}
+	}
+	if newVal != nw.value {
+		nw.value = newVal
+		if nw.onChange != nil {
+			nw.onChange(nw.value)
+		}
+	}
+}
+
+func clamp(v, a, b int) int {
+	if v < a {
+		return a
+	}
+	if v > b {
+		return b
+	}
+	return v
+}
+
+func absInt(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
+func wrapInt(v, a, b int) int {
+	r := b - a + 1
+	if r <= 0 {
+		return a
+	}
+	off := (v - a) % r
+	if off < 0 {
+		off += r
+	}
+	return a + off
+}
+
+func pointInRect(px, py, x, y, w, h int) bool {
+	return px >= x && py >= y && px < x+w && py < y+h
+}
+
+func lerpColor(c1, c2 color.RGBA, t float64) color.RGBA {
+	if t <= 0 {
+		return c1
+	}
+	if t >= 1 {
+		return c2
+	}
+	out := color.RGBA{
+		R: uint8(float64(c1.R)*(1.0-t) + float64(c2.R)*t),
+		G: uint8(float64(c1.G)*(1.0-t) + float64(c2.G)*t),
+		B: uint8(float64(c1.B)*(1.0-t) + float64(c2.B)*t),
+		A: uint8(float64(c1.A)*(1.0-t) + float64(c2.A)*t),
+	}
+	return out
 }
