@@ -159,6 +159,7 @@ func (pmd *GUIPlayMenuDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, er
 			case pmd.btnStrictIdx:
 				ctx.Config.Training = !ctx.Config.Training
 			case pmd.btnStartIdx:
+				ctx.IsReady = false
 				return ScenePlay, nil
 			case pmd.btnSaveIdx:
 				if err := ctx.Config.Save(); err != nil {

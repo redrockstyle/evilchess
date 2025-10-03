@@ -134,7 +134,7 @@ func (sd *GUISettingsDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, err
 				ctx.Theme = gbase.DarkPalette
 			case sd.btnEngineIntIdx:
 				ctx.Config.Engine = "internal"
-				ctx.Config.UCIPath = ""
+				// ctx.Config.UCIPath = ""
 			case sd.btnEngineUciIdx:
 				ctx.Config.Engine = "external"
 			case sd.btnBrowseIdx:

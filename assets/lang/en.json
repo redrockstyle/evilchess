@@ -57,9 +57,12 @@
 
     "__comment_play":"for draw play",
     "play.newgame":"New Game",
+    "play.check":"Check!",
+    "play.stalemate":"Stalemate!",
+    "play.checkmate":"Checkmate!",
+    "play.bad_move":"Impossible move",
     "play.flip":"Flip Board",
     "play.no_engine":"No engine selected",
-    "play.bad_move":"Impossible move",
     "play.engine_go":"GO Engine!",
     "play.flip_warning":"Running game",
 

@@ -23,6 +23,7 @@ type GUIGameContext struct {
 	Config       *gconf.Config
 	Theme        gbase.Palette
 	Logx         logx.Logger
+	IsReady      bool
 }
 
 func NewGUIGameContext(b *src.GameBuilder, a *GUIAssetsWorker, c *gconf.Config, l logx.Logger) *GUIGameContext {

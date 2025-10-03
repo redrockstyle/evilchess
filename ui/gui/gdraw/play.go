@@ -43,6 +43,9 @@ type GUIPlayDrawer struct {
 	flipped bool
 
 	// clocks (in seconds)
+	started    bool
+	allblock   bool
+	timeIsUp   bool
 	whiteClock float64
 	blackClock float64
 	lastTick   time.Time
@@ -74,6 +77,9 @@ type GUIPlayDrawer struct {
 	sqDarkImg    *ebiten.Image
 	borderImg    *ebiten.Image
 	scaledPieces map[base.Piece]*ebiten.Image
+
+	// game status
+	status base.GameStatus
 }
 
 func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
@@ -81,8 +87,8 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 		selectedSq:   -1,
 		dragFrom:     -1,
 		engineDoneCh: make(chan struct{}, 1),
-		whiteClock:   float64(ctx.Config.Clock),
-		blackClock:   float64(ctx.Config.Clock),
+		whiteClock:   float64(ctx.Config.Clock) * time.Hour.Minutes(),
+		blackClock:   float64(ctx.Config.Clock) * time.Hour.Minutes(),
 		lastTick:     time.Now(),
 	}
 
@@ -97,7 +103,7 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 		pd.flipped = false
 	}
 
-	if ctx.Builder == nil {
+	if !ctx.IsReady {
 		ctx.Builder = src.NewBuilderBoard(ctx.Logx)
 		ctx.Builder.CreateClassic()
 	} else if ctx.Builder.Status() == base.InvalidGame {
@@ -173,12 +179,13 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	pd.lastTick = now
 
 	// clocks update
-	if ctx.Config.UseClock {
+	if ctx.Config.UseClock && !pd.allblock && pd.started {
 		if ctx.Builder.IsWhiteToMove() {
 			pd.whiteClock -= dt
 		} else {
 			pd.blackClock -= dt
 		}
+		pd.maybeTimeIsUp(ctx)
 	}
 
 	// detect window/ theme changes
@@ -214,9 +221,11 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 			if ctx.Config.Debug || ctx.Config.Training {
 				switch i {
 				case pd.btnRedoIdx:
-					_ = ctx.Builder.Redo()
+					pd.status = ctx.Builder.Redo()
+					pd.maybeShowStatus(ctx)
 				case pd.btnUndoIdx:
-					_ = ctx.Builder.Undo()
+					pd.status = ctx.Builder.Undo()
+					pd.allblock = false
 				}
 			}
 			switch i {
@@ -225,8 +234,8 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				ctx.Builder.CreateClassic()
 				pd.selectedSq = -1
 				pd.flipped = pd.lastTick.Second()%2 == 1
-				pd.whiteClock = float64(ctx.Config.Clock)
-				pd.blackClock = float64(ctx.Config.Clock)
+				pd.whiteClock = float64(ctx.Config.Clock) * time.Hour.Minutes()
+				pd.blackClock = float64(ctx.Config.Clock) * time.Hour.Minutes()
 			case pd.btnFlipIdx:
 				if ctx.Builder.CountHalfMoves() != 0 {
 					pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.flip_warning"), nil)
@@ -236,7 +245,10 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 			case pd.btnEngineIdx:
 				if ctx.Config.UseEngine {
 					if pd.engineNotValid == false {
-						go pd.startEngineMoveAsync(ctx)
+						if !pd.started {
+							pd.started = true
+						}
+						pd.maybeStartEngine(ctx)
 					} else {
 						pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.no_engine"), nil)
 					}
@@ -301,11 +313,12 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 						Piece: base.GetPieceAt(&mb, base.ConvIndexToPoint(pd.dragFrom)),
 					}
 					ctx.Logx.Debugf("dragging attempt move from=%d to=%d", pd.dragFrom, sq)
-					if status := ctx.Builder.Move(mv); status == base.InvalidGame {
-						if ctx.Config.Debug {
-							pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
-						}
-					} else {
+					if !pd.started {
+						pd.started = true
+					}
+					pd.status = ctx.Builder.Move(mv)
+					pd.maybeShowStatus(ctx)
+					if pd.status != base.InvalidGame {
 						pd.maybeStartEngine(ctx)
 					}
 				}
@@ -325,23 +338,29 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				// second click: try move selectedSq -> sq
 				if pd.selectedSq != sq {
 					mb := ctx.Builder.CurrentBoard()
-					piece := base.GetPieceAt(&mb, base.ConvIndexToPoint(pd.selectedSq))
-					if piece == base.EmptyPiece || !pd.isPieceOwnedByPlayer(ctx, piece) {
+					pntSq := base.ConvIndexToPoint(sq)
+					pntSelectedSq := base.ConvIndexToPoint(pd.selectedSq)
+					pieceSq := base.GetPieceAt(&mb, pntSq)
+					piece := base.GetPieceAt(&mb, pntSelectedSq)
+					if pieceSq != base.EmptyPiece && pd.isPieceOwnedByPlayer(ctx, pieceSq) {
+						pd.selectedSq = sq
+					} else if piece == base.EmptyPiece || !pd.isPieceOwnedByPlayer(ctx, piece) {
 						// sanity check failed — clear selection
 						pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
 						pd.selectedSq = -1
 					} else {
+						ctx.Logx.Debugf("click-click attempt move from=%d to=%d", pd.selectedSq, sq)
 						mv := base.Move{
 							From:  base.ConvIndexToPoint(pd.selectedSq),
 							To:    base.ConvIndexToPoint(sq),
 							Piece: piece,
 						}
-						ctx.Logx.Debugf("click-click attempt move from=%d to=%d", pd.selectedSq, sq)
-						if status := ctx.Builder.Move(mv); status == base.InvalidGame {
-							if ctx.Config.Debug {
-								pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
-							}
-						} else {
+						if !pd.started {
+							pd.started = true
+						}
+						pd.status = ctx.Builder.Move(mv)
+						pd.maybeShowStatus(ctx)
+						if pd.status != base.InvalidGame {
 							pd.maybeStartEngine(ctx)
 						}
 						// after attempt clear selection (regardless of result)
@@ -405,19 +424,50 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	return SceneNotChanged, nil
 }
 
+func (pd *GUIPlayDrawer) maybeTimeIsUp(ctx *ghelper.GUIGameContext) {
+	if pd.blackClock <= 0 || pd.whiteClock <= 0 {
+		if !ctx.Config.Debug && !ctx.Config.Training {
+			pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.timeisup"), nil)
+		}
+		pd.allblock = true
+	}
+}
+
+func (pd *GUIPlayDrawer) maybeShowStatus(ctx *ghelper.GUIGameContext) {
+	switch pd.status {
+	case base.Check:
+		if ctx.Config.Debug || ctx.Config.Training {
+			pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.check"), nil)
+		}
+	case base.Stalemate:
+		pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.stalemate"), nil)
+		pd.allblock = true
+	case base.Checkmate:
+		pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.checkmate"), nil)
+		pd.allblock = true
+	case base.InvalidGame:
+		if ctx.Config.Debug || ctx.Config.Training {
+			pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
+		}
+	case base.Pass:
+	default:
+	}
+}
+
 // should be a method on GUIPlayDrawer
 func (pd *GUIPlayDrawer) maybeStartEngine(ctx *ghelper.GUIGameContext) {
+	// check end game
+	if pd.allblock {
+		pd.maybeShowStatus(ctx)
+		return
+	}
 	// engine disabled or invalid -> nothing to do
 	if !ctx.Config.UseEngine || pd.engineNotValid {
 		return
 	}
 
 	// decide which color is the human player (same logic как в isPieceOwnedByPlayer)
-	playerIsWhite := true
-	if ctx.Config.PlayAs == "black" {
-		playerIsWhite = false
-	}
-
+	playerIsWhite := !pd.flipped
 	if ctx.Builder.IsWhiteToMove() != playerIsWhite {
 		// небольшая пауза, чтобы пользователь успел увидеть свой ход
 		go func() {
@@ -438,21 +488,20 @@ func (pd *GUIPlayDrawer) isPieceOwnedByPlayer(ctx *ghelper.GUIGameContext, p bas
 		return false
 	}
 
+	playerIsWhite := !pd.flipped
+	// если фигура принадлежит игроку
+	if isWhitePiece != playerIsWhite {
+		return false
+	}
+
 	if !(ctx.Config.Debug || ctx.Config.UseEngine == false || ctx.Config.Training) {
-		playerIsWhite := true
-		if ctx.Config.PlayAs == "black" {
-			playerIsWhite = false
-		}
-		// если фигура принадлежит игроку
-		if isWhitePiece != playerIsWhite {
-			return false
-		}
 		// если ход игрока
 		if ctx.Builder.IsWhiteToMove() != playerIsWhite {
 			return false
 		}
 	}
 	return true
+
 }
 
 // async call ctx.Builder.EngineMove
@@ -467,10 +516,8 @@ func (pd *GUIPlayDrawer) startEngineMoveAsync(ctx *ghelper.GUIGameContext) {
 
 	// run engine
 	go func() {
-		if status := ctx.Builder.EngineMove(); status == base.InvalidGame {
-			// message box ???
-			ctx.Logx.Error("error move engine")
-		}
+		pd.status = ctx.Builder.EngineMove()
+		pd.maybeShowStatus(ctx)
 
 		// call to main loop
 		pd.engineDoneCh <- struct{}{}
@@ -584,9 +631,12 @@ func (pd *GUIPlayDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 		// format times
 		wc := fmt.Sprintf("%02d:%02d", int(pd.whiteClock)/60, int(pd.whiteClock)%60)
 		bc := fmt.Sprintf("%02d:%02d", int(pd.blackClock)/60, int(pd.blackClock)%60)
+		if pd.flipped {
+			wc, bc = bc, wc
+		}
 
-		drawClock(pd.boardX+pd.boardSize+20, pd.boardY+10, "Engine", bc, !ctx.Builder.IsWhiteToMove())
-		drawClock(pd.boardX+pd.boardSize+20, pd.boardY+pd.boardSize-70, "You", wc, ctx.Builder.IsWhiteToMove())
+		drawClock(pd.boardX+pd.boardSize+20, pd.boardY+10, "Engine", bc, pd.flipped)
+		drawClock(pd.boardX+pd.boardSize+20, pd.boardY+pd.boardSize-70, "You", wc, !pd.flipped)
 	}
 	// draw UI buttons (animated via b.DrawAnimated)
 	for _, b := range pd.buttons {
@@ -616,7 +666,7 @@ func (pd *GUIPlayDrawer) prepareCache(ctx *ghelper.GUIGameContext) {
 	pd.sqDarkImg.Fill(ctx.Theme.Bg)
 
 	// border around board
-	pd.borderImg = ghelper.RenderRoundedRect(pd.boardSize+8, pd.boardSize+8, 6, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 2)
+	pd.borderImg = ghelper.RenderRoundedRect(pd.boardSize+8, pd.boardSize+8, 6, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 
 	// scaled pieces (cache)
 	pd.scaledPieces = make(map[base.Piece]*ebiten.Image, 12)
