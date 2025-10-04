@@ -108,6 +108,8 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 		ctx.Builder.CreateClassic()
 	} else if ctx.Builder.Status() == base.InvalidGame {
 		ctx.Builder.CreateClassic()
+	} else {
+		pd.maybeShowStatus(ctx)
 	}
 
 	if ctx.Config.UseEngine {
@@ -254,6 +256,7 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 					}
 				}
 			case pd.btnBackIdx:
+				ctx.IsReady = false
 				return SceneMenu, nil
 			}
 		}
@@ -418,6 +421,7 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 
 	// escape -> redo
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		ctx.IsReady = false
 		return SceneMenu, nil
 	}
 
@@ -749,45 +753,3 @@ func (pd *GUIPlayDrawer) indexToScreenXY(idx int) (x, y int) {
 // 	rank := fy
 // 	return rank*8 + file
 // }
-
-// indexToFileRank: index 0..63 -> file(0..7), rank(0..7) where rank 0 == bottom (a1..h1).
-func indexToFileRank(idx int) (int, int) {
-	f := idx % 8
-	r := idx / 8
-	return f, r
-}
-
-func inBoard(px, py, bx, by, sqSize int) bool {
-	return px >= bx && py >= by && px < bx+sqSize*8 && py < by+sqSize*8
-}
-
-// return: 0..63
-// px,py — screen cords; flipped — chessboard flipped
-func pixelToSquare(px, py, bx, by, sqSize int, flipped bool) int {
-	fx := (px - bx) / sqSize
-	fy := (py - by) / sqSize
-	if fx < 0 {
-		fx = 0
-	}
-	if fx > 7 {
-		fx = 7
-	}
-	if fy < 0 {
-		fy = 0
-	}
-	if fy > 7 {
-		fy = 7
-	}
-
-	var file, rank int
-	if !flipped {
-		file = fx
-		// fy: 0 = top row on screen -> that's rank 7, so rank = 7 - fy
-		rank = 7 - fy
-	} else {
-		// flipped: top-left on screen corresponds to a1 (rank 0)
-		file = 7 - fx
-		rank = fy
-	}
-	return rank*8 + file
-}

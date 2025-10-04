@@ -22,7 +22,9 @@ func ConvertBoardToFEN(board base.Board) string {
 					b.WriteString(strconv.Itoa(empty))
 					empty = 0
 				}
-				b.WriteRune(base.ConvertRuneFromPiece(pc))
+				if r := base.ConvertRuneFromPiece(pc); r != 0 {
+					b.WriteRune(r)
+				}
 			}
 		}
 		if empty > 0 {

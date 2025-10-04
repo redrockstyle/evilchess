@@ -7,14 +7,14 @@
     "lang.title":"Lang",
     "lang.type":"EN",
 
-    "__comment_menu":"for draw menu",
+    "__comment_menu":"draw menu",
     "menu.play":"Play",
     "menu.editor":"Board Editor",
     "menu.analyze":"Board Editor",
     "menu.settings":"Settings",
     "menu.exit":"Exit",
 
-    "__comment_settings":"for draw settings",
+    "__comment_settings":"draw settings",
     "settings.title":"Settings",
     "settings.theme":"Theme",
     "settings.theme.light":"Light Theme",
@@ -35,7 +35,7 @@
     "settings.save.success":"Settings saved successfully",
     "settings.save.failed":"Failed to save settings",
 
-    "__comment_play_menu":"for draw play menu",
+    "__comment_play_menu":"draw play menu",
     "playmenu.title":"Game Setup",
     "playmenu.engine":"Engine",
     "playmenu.engine.lvl":"Strength",
@@ -55,7 +55,7 @@
     "playmenu.start":"Start Game",
     "playmenu.unlimited":"Unlimited",
 
-    "__comment_play":"for draw play",
+    "__comment_play":"draw play",
     "play.newgame":"New Game",
     "play.check":"Check!",
     "play.stalemate":"Stalemate!",
@@ -66,9 +66,36 @@
     "play.engine_go":"GO Engine!",
     "play.flip_warning":"Running game",
 
+    "__comment_edit":"draw editor",
+    "editor.apply":"Done",
+    "editor.title":"Board Setup",
+    "editor.move.white":"White",
+    "editor.move.black":"Black",
+    "editor.casting.wk":"0-0",
+    "editor.casting.wq":"0-0-0",
+    "editor.casting.bk":"0-0",
+    "editor.casting.bq":"0-0-0",
+    "editor.start_position":"Start Position",
+    "editor.flip":"Flip Board",
+    "editor.apply_failed":"Bad position",
+    "editor.clipboard":"Clipboard",
+    "editor.paste_fen":"Paste FEN",
+    "editor.copy_fen":"Copy FEN",
+    "editor.place":"Place",
+    "editor.move":"Move",
+    "editor.delete":"Delete",
+    "editor.clear":"Clear Board",
+    "editor.fen_loaded":"FEN loaded successfully!",
+    "editor.fen_invalid":"Invalid FEN",
+
     "__comment_buttons":"text buttons",
     "button.ok":"OK",
     "button.back":"Back",
-    "button.save":"Save"
+    "button.save":"Save",
 
+    "__comment_messages":"text messages",
+    "message.paste":"Pasting",
+    "message.copy":"Copy to clipboard",
+    "message.copy.failed":"Copy failed",
+    "message.todo":"It doesn't work yet"
 }

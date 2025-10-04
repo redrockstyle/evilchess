@@ -1,6 +1,7 @@
 package src
 
 import (
+	"errors"
 	"evilchess/src/base"
 	"evilchess/src/engine"
 	"evilchess/src/logic/convert/convfen"
@@ -41,6 +42,14 @@ func (gb *GameBuilder) CreateFromPGN(r io.Reader) (base.GameStatus, error) {
 	return gb.status, nil
 }
 
+func (gb *GameBuilder) CreateFromBoard(b *base.Board) (base.GameStatus, error) {
+	fen := convfen.ConvertBoardToFEN(*b)
+	if fen == "" {
+		return base.InvalidGame, errors.New("invalid board")
+	}
+	return gb.CreateFromFEN(fen)
+}
+
 func (gb *GameBuilder) CreateFromFEN(fen string) (base.GameStatus, error) {
 	if gb.history.Len() != 0 { // check recreate
 		gb.history = history.NewHistory()
@@ -51,6 +60,12 @@ func (gb *GameBuilder) CreateFromFEN(fen string) (base.GameStatus, error) {
 	if err != nil {
 		return base.InvalidGame, fmt.Errorf("error parse FEN: %v", err)
 	}
+
+	// check and the checker's possibility move
+	if rules.IsInCheck(board, !board.WhiteToMove) && board.WhiteToMove {
+		return base.InvalidGame, errors.New("check and move")
+	}
+
 	gb.board = board
 	gb.status = rules.GameStatusOf(gb.board)
 	return gb.status, nil
@@ -60,6 +75,11 @@ func (gb *GameBuilder) CreateClassic() {
 	gb.logger.Debug("create classic game")
 	gb.status, _ = gb.CreateFromFEN(base.FEN_START_GAME)
 	gb.history.SetDefaultInfoGame()
+}
+
+func (gb *GameBuilder) CreateEmpty() {
+	gb.logger.Debug("create empty board")
+	gb.status, _ = gb.CreateFromFEN(base.FEN_EMPTY_GAME)
 }
 
 func (gb *GameBuilder) Status() base.GameStatus {
@@ -111,6 +131,9 @@ func (gb *GameBuilder) CurrentMove(number uint) base.GameStatus {
 }
 
 func (gb *GameBuilder) CurrentBoard() base.Mailbox {
+	if gb.board == nil {
+		gb.CreateEmpty()
+	}
 	return gb.board.Mailbox
 }
 

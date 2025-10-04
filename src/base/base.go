@@ -7,6 +7,27 @@ import (
 
 // Forsyth–Edwards Notation
 const FEN_START_GAME string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+const FEN_EMPTY_GAME string = "8/8/8/8/8/8/8/8 w - - 0 1"
+
+const (
+	a1 = 0
+	b1 = 1
+	c1 = 2
+	d1 = 3
+	e1 = 4
+	f1 = 5
+	g1 = 6
+	h1 = 7
+
+	a8 = 56
+	b8 = 57
+	c8 = 58
+	d8 = 59
+	e8 = 60
+	f8 = 61
+	g8 = 62
+	h8 = 63
+)
 
 type Piece uint8
 
@@ -23,8 +44,8 @@ const (
 	BBishop      Piece = 4
 	BKnight      Piece = 3
 	BPawn        Piece = 1
-	EmptyPiece   Piece = 99
-	InvalidPiece Piece = 0
+	EmptyPiece   Piece = 0
+	InvalidPiece Piece = 99
 )
 
 type GameStatus uint8
@@ -253,7 +274,7 @@ func ConvertRuneFromPiece(p Piece) rune {
 	case BKing:
 		return 'k'
 	default:
-		return '.'
+		return 0
 	}
 }
 
@@ -286,4 +307,52 @@ func ConvertUpperRuneFromPiece(p Piece) rune {
 	default:
 		return '?'
 	}
+}
+
+// check casting in current mailbox
+func IsPossibleCasting(m Mailbox, whiteToMove, longCast, strict bool) bool {
+	pntKing, pntLeftRook, pntRightRook := e1, a1, h1
+	king := WKing
+	rook := WRook
+	if !whiteToMove {
+		pntKing, pntLeftRook, pntRightRook = e8, a8, h8
+		king = BKing
+		rook = BRook
+	}
+
+	if strict {
+		if longCast {
+			return m[pntLeftRook] == rook && m[pntKing] == king
+		} else {
+			return m[pntRightRook] == rook && m[pntKing] == king
+		}
+	} else {
+		searcher := func(s, e int, p Piece) int {
+			for i := s; i <= e; i++ {
+				if m[i] == p {
+					return i
+				}
+			}
+			return -1
+		}
+
+		// search king
+		if pntKing = searcher(pntLeftRook, pntRightRook, king); pntKing == -1 {
+			return false
+		}
+
+		if longCast {
+			// search left rook
+			if pntLeftRook := searcher(pntLeftRook, pntKing-1, rook); pntLeftRook == -1 {
+				return false
+			}
+		} else {
+			//search right rook
+			if pntRightRook := searcher(pntKing+1, pntRightRook, rook); pntRightRook == -1 {
+				return false
+			}
+		}
+	}
+
+	return true
 }

@@ -51,7 +51,7 @@ func NewGUIMenuDrawer(ctx *ghelper.GUIGameContext) *GUIMenuDrawer {
 	startY := (ctx.Config.WindowH - totalH) / 2
 	cx := ctx.Config.WindowW / 2
 	md.btnPlayIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.play"), cx-btnW/2, startY, btnW, btnH, md.buttons)
-	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.editor"), cx-btnW/2, startY+(btnH+gap), btnW, btnH, md.buttons)
+	md.btnEditIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.editor"), cx-btnW/2, startY+(btnH+gap), btnW, btnH, md.buttons)
 	md.btnStgsIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.settings"), cx-btnW/2, startY+2*(btnH+gap), btnW, btnH, md.buttons)
 	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.exit"), cx-btnW/2, startY+3*(btnH+gap), btnW, btnH, md.buttons)
 	// left-down buttons
@@ -102,7 +102,7 @@ func (md *GUIMenuDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 					switch i {
 					case md.btnPlayIdx:
 						return ScenePlayMenu, nil
-					case md.btnExitIdx:
+					case md.btnEditIdx:
 						return SceneEditor, nil
 					case md.btnStgsIdx:
 						return SceneSettings, nil
