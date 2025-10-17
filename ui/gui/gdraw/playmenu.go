@@ -118,18 +118,12 @@ func (pmd *GUIPlayMenuDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, er
 	mx, my := ebiten.CursorPosition()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := mouseDown && !pmd.prevMouseDown
-	// justReleased := !mouseDown && pmd.prevMouseDown
+	justReleased := !mouseDown && pmd.prevMouseDown
 	pmd.prevMouseDown = mouseDown
 
 	// if message box open -> handle clicks on it
 	if pmd.msg.Open {
-		if justPressed {
-			// check OK button area in modal coords (we place it centered)
-			// Modal geometry: centered rectangle
-			bounds := text.BoundString(ctx.AssetsWorker.Fonts().Normal, ctx.AssetsWorker.Lang().T("settings.save.success"))
-			pmd.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
-		}
-		// animate open/close
+		pmd.msg.Update(ctx, mx, my, justReleased)
 		pmd.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
@@ -206,9 +200,11 @@ func (pmd *GUIPlayMenuDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.I
 	}
 
 	// if message box open -> draw overlay and modal
-	if pmd.msg.Open || pmd.msg.Animating {
-		DrawModal(ctx, pmd.msg.Scale, pmd.msg.Text, screen)
-	}
+	// if pmd.msg.Open || pmd.msg.Animating {
+	// 	DrawModal(ctx, pmd.msg.Scale, pmd.msg.Text, screen)
+	// }
+	pmd.msg.Draw(ctx, screen)
+
 
 	if ctx.Config.Debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))

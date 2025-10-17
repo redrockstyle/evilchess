@@ -2,15 +2,15 @@ package gimages
 
 import (
 	"evilchess/src/base"
+	"evilchess/ui/gui/gbase/gos"
 	"image"
-	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 func loadIcon(path string) (image.Image, error) {
-	f, err := os.Open(path)
+	f, err := gos.Open(path)
 	if err != nil {
 		return nil, err
 	}

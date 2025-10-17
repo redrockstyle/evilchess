@@ -63,7 +63,7 @@ type Engine interface {
 
 // helper: parse uci move (e2e4, e7e8q, etc.) into base.Move.
 // whiteToMove indicates whether this move is made by White (for promotion piece color).
-func (i *AnalysisInfo) GetBestMove(b *base.Board) *base.Move {
+func (i *AnalysisInfo) GetBestMove(mb base.Mailbox) *base.Move {
 	if i.BestMove != nil {
 		return i.BestMove
 	}
@@ -84,7 +84,7 @@ func (i *AnalysisInfo) GetBestMove(b *base.Board) *base.Move {
 	return &base.Move{
 		From:  base.ConvIndexToPoint(fromIdx),
 		To:    base.ConvIndexToPoint(toIdx),
-		Piece: b.Mailbox[fromIdx],
+		Piece: mb[fromIdx],
 	}
 }
 

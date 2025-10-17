@@ -50,10 +50,10 @@ func NewGUIMenuDrawer(ctx *ghelper.GUIGameContext) *GUIMenuDrawer {
 	totalH := n*btnH + (n-1)*gap
 	startY := (ctx.Config.WindowH - totalH) / 2
 	cx := ctx.Config.WindowW / 2
-	md.btnPlayIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.play"), cx-btnW/2, startY, btnW, btnH, md.buttons)
-	md.btnEditIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.editor"), cx-btnW/2, startY+(btnH+gap), btnW, btnH, md.buttons)
-	md.btnStgsIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.settings"), cx-btnW/2, startY+2*(btnH+gap), btnW, btnH, md.buttons)
-	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("menu.exit"), cx-btnW/2, startY+3*(btnH+gap), btnW, btnH, md.buttons)
+	md.btnPlayIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.play"), cx-btnW/2, startY, btnW, btnH, md.buttons)
+	md.btnEditIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.editor"), cx-btnW/2, startY+(btnH+gap), btnW, btnH, md.buttons)
+	md.btnStgsIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.settings"), cx-btnW/2, startY+2*(btnH+gap), btnW, btnH, md.buttons)
+	md.btnExitIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.exit"), cx-btnW/2, startY+3*(btnH+gap), btnW, btnH, md.buttons)
 	// left-down buttons
 	md.btnLangIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("lang.type"), 20, ctx.Config.WindowH-76, 56, 56, md.buttons)
 	md.btnInfoIdx, md.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("about.title"), 90, ctx.Config.WindowH-76, 56, 56, md.buttons)
@@ -78,14 +78,7 @@ func (md *GUIMenuDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 
 	// if message box open -> handle clicks on it
 	if md.msg.Open {
-		if justClicked {
-			// check OK button area in modal coords (we place it centered)
-			// Modal geometry: centered rectangle
-			bounds := text.BoundString(ctx.AssetsWorker.Fonts().Normal, ctx.AssetsWorker.Lang().T("about.body"))
-			md.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
-
-		}
-		// animate open/close
+		md.msg.Update(ctx, mx, my, justReleased)
 		md.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
@@ -146,10 +139,11 @@ func (md *GUIMenuDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 	}
 
 	// if message box open -> draw overlay and modal
-	if md.msg.Open || md.msg.Animating {
-		DrawModal(ctx, md.msg.Scale, md.msg.Text, screen)
-	}
-
+	// if md.msg.Open || md.msg.Animating {
+	// 	// md.msg.Draw(ctx, screen)
+	// 	DrawModal(ctx, md.msg.Scale, md.msg.Text, screen)
+	// }
+	md.msg.Draw(ctx, screen)
 	md.drawCrown(screen)
 
 	text.Draw(screen, ctx.AssetsWorker.Lang().T("version"), ctx.AssetsWorker.Fonts().Normal, ctx.Config.WindowW-160, ctx.Config.WindowH-24, ctx.Theme.MenuText)
@@ -162,10 +156,10 @@ func (md *GUIMenuDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 func (md *GUIMenuDrawer) refreshButtons(ctx *ghelper.GUIGameContext) {
 	// update labels and re-render button images if needed
 	labels := []string{
-		ctx.AssetsWorker.Lang().T("menu.play"),
-		ctx.AssetsWorker.Lang().T("menu.editor"),
-		ctx.AssetsWorker.Lang().T("menu.settings"),
-		ctx.AssetsWorker.Lang().T("menu.exit"),
+		ctx.AssetsWorker.Lang().T("button.play"),
+		ctx.AssetsWorker.Lang().T("button.editor"),
+		ctx.AssetsWorker.Lang().T("button.settings"),
+		ctx.AssetsWorker.Lang().T("button.exit"),
 		ctx.AssetsWorker.Lang().T("lang.type"),
 		ctx.AssetsWorker.Lang().T("about.title"),
 	}

@@ -138,7 +138,7 @@ func ConvertFENToBoard(fen string) (*base.Board, error) {
 	// en passant
 	ep := parts[3]
 	if ep == "-" {
-		board.EnPassant = 0
+		board.EnPassant = -1
 	} else {
 		if board.EnPassant, err = base.SquareFromAlgebraic(ep); err != nil {
 			return nil, fmt.Errorf("error parsing en-parrant: %s", ep)

@@ -2,8 +2,8 @@ package gconf
 
 import (
 	"encoding/json"
+	"evilchess/ui/gui/gbase/gos"
 	"fmt"
-	"os"
 )
 
 type Config struct {
@@ -43,15 +43,15 @@ func defaultConfig() Config {
 func NewGUIConfig() (*Config, error) {
 	file := "evilchess.json"
 
-	_, err := os.Stat(file)
-	if os.IsNotExist(err) {
+	_, err := gos.Stat(file)
+	if gos.IsNotExist(err) {
 		def := defaultConfig()
 		return &def, nil
 	} else if err != nil {
 		return nil, err
 	}
 
-	conf, err := os.Open(file)
+	conf, err := gos.Open(file)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(file, jsonData, 0644)
+	err = gos.WriteFile(file, jsonData, 0644)
 	if err != nil {
 		return err
 	}

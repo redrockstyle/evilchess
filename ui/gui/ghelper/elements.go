@@ -117,22 +117,45 @@ func (b *Button) DrawAnimated(screen *ebiten.Image, face font.Face, theme gbase.
 }
 
 // ---- MessageBox ----
+// MessageBox с choices и корректной геометрией (Scale-aware)
+type MessageChoice struct {
+	Label string
+	Image *ebiten.Image
+	Value interface{}
+}
+
+type imageRect struct{ X, Y, W, H int }
 
 type MessageBox struct {
-	Label      string
-	X, Y, W, H int     // position
-	Open       bool    //
-	Animating  bool    //
-	Scale      float64 // 0..1
-	Opening    bool
-	Text       string
-	OnClose    func()
+	// content
+	Label string
+
+	// state
+	Open      bool
+	Animating bool
+	Scale     float64 // 0..1
+	Opening   bool
+	OnClose   func()
+
+	// choices
+	Choices    []MessageChoice
+	HoverIndex int
+	OnSelect   func(idx int, v interface{})
+
+	// internal layout cache
+	lastModalRect imageRect
+}
+
+func NewMessageBox() *MessageBox {
+	return &MessageBox{
+		Scale:      0,
+		HoverIndex: -1,
+	}
 }
 
 func (mb *MessageBox) AnimateMessage() {
-	// basic animation: linear scale and fade (scale 0->1 opening, 1->0 closing)
 	const dt = 1.0 / 60.0
-	const speed = 6.0 // how fast the tween goes
+	const speed = 6.0
 	if mb.Opening {
 		mb.Scale += speed * dt
 		if mb.Scale >= 1.0 {
@@ -145,7 +168,6 @@ func (mb *MessageBox) AnimateMessage() {
 			mb.Scale = 0.0
 			mb.Animating = false
 			mb.Open = false
-			// call OnClose if set
 			if mb.OnClose != nil {
 				mb.OnClose()
 			}
@@ -154,7 +176,11 @@ func (mb *MessageBox) AnimateMessage() {
 }
 
 func (mb *MessageBox) ShowMessage(msg string, onClose func()) {
-	mb.Text = msg
+	mb.Label = msg
+	mb.Choices = nil
+	mb.OnSelect = nil
+	mb.HoverIndex = -1
+
 	mb.Open = true
 	mb.Opening = true
 	mb.Animating = true
@@ -162,43 +188,265 @@ func (mb *MessageBox) ShowMessage(msg string, onClose func()) {
 	mb.OnClose = onClose
 }
 
-func (mb *MessageBox) ShowMessageInRect(mx, my int) bool {
-	if PointInRect(mx, my, mb.X, mb.Y, mb.W, mb.H) {
-		mb.ShowMessage(mb.Label, nil)
-		return true
+func (mb *MessageBox) ShowMessageWithChoices(msg string, choices []MessageChoice, onSelect func(idx int, v interface{})) {
+	mb.Label = msg
+	mb.Choices = choices
+	mb.OnSelect = onSelect
+	mb.HoverIndex = -1
+
+	mb.Open = true
+	mb.Opening = true
+	mb.Animating = true
+	mb.Scale = 0.0
+	mb.OnClose = nil
+}
+
+func (mb *MessageBox) Update(ctx *GUIGameContext, mx, my int, justReleased bool) {
+	if !mb.Open && !mb.Animating {
+		return
 	}
-	return false
+	if !mb.Opening && mb.Animating {
+		return
+	}
+
+	// layout constants
+	fontNormal := ctx.AssetsWorker.Fonts().Normal
+	txtBounds := text.BoundString(fontNormal, mb.Label)
+	textW := txtBounds.Dx()
+	textH := txtBounds.Dy()
+	if textW < 200 {
+		textW = 200
+	}
+	paddingX := 64
+	paddingY := 40
+	choiceW := 64
+	choiceH := 64
+	choiceGap := 14
+
+	choicesCount := len(mb.Choices)
+	mw := textW + paddingX
+	mh := textH + paddingY
+	if choicesCount > 0 {
+		totalChoicesW := choicesCount*choiceW + (choicesCount-1)*choiceGap
+		if float64(totalChoicesW+paddingX) > float64(mw) {
+			mw = totalChoicesW + paddingX
+		}
+		// h: text + padding + choiceH + offset
+		mh = textH + paddingY + choiceH + 24
+	} else {
+		// for OK button
+		mh += 64
+	}
+
+	// scale-aware current size
+	scale := mb.Scale
+	if scale < 0 {
+		scale = 0
+	}
+	if scale > 1 {
+		scale = 1
+	}
+	currW := int(float64(mw) * scale)
+	currH := int(float64(mh) * scale)
+	if currW < 6 {
+		currW = 6
+	}
+	if currH < 6 {
+		currH = 6
+	}
+
+	// center
+	mx0 := (ctx.Config.WindowW - currW) / 2
+	my0 := (ctx.Config.WindowH - currH) / 2
+
+	mb.lastModalRect = imageRect{X: mx0, Y: my0, W: currW, H: currH}
+	mb.HoverIndex = -1
+	if choicesCount > 0 {
+		totalChoicesW := choicesCount*choiceW + (choicesCount-1)*choiceGap
+		startX := mx0 + (currW-totalChoicesW)/2
+		textY := my0 + 40 + textH
+		choicesY := textY + 12
+		if InsideRect(mx, my, startX, choicesY, totalChoicesW, choiceH) {
+			relX := mx - startX
+			idx := relX / (choiceW + choiceGap)
+			if idx >= 0 && idx < choicesCount {
+				cellX := startX + idx*(choiceW+choiceGap)
+				if InsideRect(mx, my, cellX, choicesY, choiceW, choiceH) {
+					mb.HoverIndex = idx
+				}
+			}
+		}
+		if justReleased && mb.HoverIndex >= 0 {
+			idx := mb.HoverIndex
+			val := mb.Choices[idx].Value
+			if mb.OnSelect != nil {
+				mb.OnSelect(idx, val)
+			}
+			mb.CollapseMessage()
+		}
+	} else {
+		// OK button area
+		okW, okH := 120, 44
+		okX := mx0 + (currW-okW)/2
+		okY := my0 + currH - okH - 20
+		if justReleased && PointInRect(mx, my, okX, okY, okW, okH) {
+			mb.CollapseMessage()
+		}
+	}
+}
+
+func (mb *MessageBox) IsOverlayed() bool {
+	return mb.Open || mb.Animating
+}
+
+func (mb *MessageBox) Draw(ctx *GUIGameContext, screen *ebiten.Image) {
+	if !mb.Open && !mb.Animating {
+		return
+	}
+	// overlay
+	overlay := ebiten.NewImage(ctx.Config.WindowW, ctx.Config.WindowH)
+	overlay.Fill(ctx.Theme.ModalBg)
+	screen.DrawImage(overlay, nil)
+	// text
+	fontNormal := ctx.AssetsWorker.Fonts().Normal
+	bounds := text.BoundString(fontNormal, mb.Label)
+	textW := bounds.Dx()
+	textH := bounds.Dy()
+	if textW < 200 {
+		textW = 200
+	}
+
+	// layout params
+	paddingX := 64
+	paddingY := 40
+	choiceW := 64
+	choiceH := 64
+	choiceGap := 14
+	choicesCount := len(mb.Choices)
+
+	mw := textW + paddingX
+	mh := textH + paddingY
+	if choicesCount > 0 {
+		totalChoicesW := choicesCount*choiceW + (choicesCount-1)*choiceGap
+		if float64(totalChoicesW+paddingX) > float64(mw) {
+			mw = totalChoicesW + paddingX
+		}
+		mh = textH + paddingY + choiceH + 24
+	} else {
+		mh += 64
+	}
+
+	scale := mb.Scale
+	if scale < 0 {
+		scale = 0
+	}
+	if scale > 1 {
+		scale = 1
+	}
+	currW := int(float64(mw) * scale)
+	currH := int(float64(mh) * scale)
+	if currW < 6 {
+		currW = 6
+	}
+	if currH < 6 {
+		currH = 6
+	}
+	mx := (ctx.Config.WindowW - currW) / 2
+	my := (ctx.Config.WindowH - currH) / 2
+
+	modalImg := RenderRoundedRect(currW, currH, 16, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(mx), float64(my))
+	screen.DrawImage(modalImg, op)
+	if scale > 0.85 {
+		textX := mx + 32
+		textY := my + 20
+		if textH < 40 {
+			textY += textH
+		} else {
+			textY += 22
+		}
+		text.Draw(screen, mb.Label, fontNormal, textX, textY, ctx.Theme.MenuText)
+		if choicesCount > 0 {
+			totalChoicesW := choicesCount*choiceW + (choicesCount-1)*choiceGap
+			startX := mx + (currW-totalChoicesW)/2
+			choicesY := textY + 12
+			cx, cy := ebiten.CursorPosition()
+			hover := -1
+			if InsideRect(cx, cy, startX, choicesY, totalChoicesW, choiceH) {
+				relX := cx - startX
+				idx := relX / (choiceW + choiceGap)
+				if idx >= 0 && idx < choicesCount {
+					cellX := startX + idx*(choiceW+choiceGap)
+					if InsideRect(cx, cy, cellX, choicesY, choiceW, choiceH) {
+						hover = idx
+					}
+				}
+			}
+			for i, ch := range mb.Choices {
+				cxPos := startX + i*(choiceW+choiceGap)
+				bg := RenderRoundedRect(choiceW, choiceH, 13, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+				opc := &ebiten.DrawImageOptions{}
+				opc.GeoM.Translate(float64(cxPos), float64(choicesY))
+				screen.DrawImage(bg, opc)
+
+				if ch.Image != nil {
+					iw, ih := ch.Image.Size()
+					if iw > 0 && ih > 0 {
+						sx := float64(choiceW) / float64(iw)
+						sy := float64(choiceH) / float64(ih)
+						s := math.Min(sx, sy) * 0.9
+						opImg := &ebiten.DrawImageOptions{}
+						opImg.GeoM.Scale(s, s)
+						tw := float64(iw) * s
+						th := float64(ih) * s
+						tx := float64(cxPos) + (float64(choiceW)-tw)/2.0
+						ty := float64(choicesY) + (float64(choiceH)-th)/2.0
+						opImg.GeoM.Translate(tx, ty)
+						opImg.Filter = ebiten.FilterLinear
+						screen.DrawImage(ch.Image, opImg)
+					}
+				} else if ch.Label != "" {
+					text.Draw(screen, ch.Label, ctx.AssetsWorker.Fonts().Pixel, cxPos+8, choicesY+40, ctx.Theme.MenuText)
+				}
+
+				if i == hover {
+					EbitenutilDrawRectStroke(screen, float64(cxPos)+2, float64(choicesY)+2, float64(choiceW)-4, float64(choiceH)-4, 3, ctx.Theme.Accent)
+				}
+			}
+		} else {
+			// OK button
+			okW, okH := 120, 44
+			okX := mx + (currW-okW)/2
+			okY := my + currH - okH - 20
+			okImg := RenderRoundedRect(okW, okH, 12, ctx.Theme.Accent, ctx.Theme.ButtonStroke, 3)
+			op2 := &ebiten.DrawImageOptions{}
+			op2.GeoM.Translate(float64(okX), float64(okY))
+			screen.DrawImage(okImg, op2)
+			text.Draw(screen, ctx.AssetsWorker.Lang().T("button.ok"), ctx.AssetsWorker.Fonts().PixelLow, okX+36, okY+30, color.White)
+		}
+	}
 }
 
 func (mb *MessageBox) CollapseMessage() {
-	// start closing animation
 	mb.Opening = false
 	mb.Animating = true
-	// call close handler after animation ends
 	if mb.OnClose == nil {
 		mb.OnClose = func() {}
 	}
 }
 
-func (mb *MessageBox) CollapseMessageInRect(windW, windH, textW, textH int) {
-	mw := textW + 64
-	mh := textH + 120
-	mx := (windW - mw) / 2
-	my := (windH - mh) / 2
-
+// Check click OK
+func (mb *MessageBox) CollapseMessageInRect(mx, my int) {
+	r := mb.lastModalRect
+	if r.W == 0 || r.H == 0 {
+		return
+	}
 	okW, okH := 120, 44
-	okX := mx + (mw-okW)/2
-	okY := my + mh - 56
-
-	mxPos, myPos := ebiten.CursorPosition()
-	if PointInRect(mxPos, myPos, okX, okY, okW, okH) {
-		// start closing animation
-		mb.Opening = false
-		mb.Animating = true
-		// call close handler after animation ends
-		if mb.OnClose == nil {
-			mb.OnClose = func() {}
-		}
+	okX := r.X + (r.W-okW)/2
+	okY := r.Y + r.H - okH - 20
+	if PointInRect(mx, my, okX, okY, okW, okH) {
+		mb.CollapseMessage()
 	}
 }
 
@@ -481,4 +729,8 @@ func lerpColor(c1, c2 color.RGBA, t float64) color.RGBA {
 		A: uint8(float64(c1.A)*(1.0-t) + float64(c2.A)*t),
 	}
 	return out
+}
+
+func InsideRect(px, py, x, y, w, h int) bool {
+	return px >= x && py >= y && px < x+w && py < y+h
 }

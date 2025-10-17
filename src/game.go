@@ -61,9 +61,18 @@ func (gb *GameBuilder) CreateFromFEN(fen string) (base.GameStatus, error) {
 		return base.InvalidGame, fmt.Errorf("error parse FEN: %v", err)
 	}
 
-	// check and the checker's possibility move
+	// if kings not found
+	if moves.FindKing(&board.Mailbox, true) == -1 || moves.FindKing(&board.Mailbox, false) == -1 {
+		strerr := "king not found"
+		gb.logger.Error(strerr)
+		return base.InvalidGame, errors.New(strerr)
+	}
+
+	// if check and the checker's possibility move
 	if rules.IsInCheck(board, !board.WhiteToMove) && board.WhiteToMove {
-		return base.InvalidGame, errors.New("check and move")
+		strerr := "check and the checker's possibility move"
+		gb.logger.Error(strerr)
+		return base.InvalidGame, errors.New(strerr)
 	}
 
 	gb.board = board
@@ -137,6 +146,13 @@ func (gb *GameBuilder) CurrentBoard() base.Mailbox {
 	return gb.board.Mailbox
 }
 
+func (gb *GameBuilder) CurrentPosition() base.Board {
+	if gb.board == nil {
+		gb.CreateEmpty()
+	}
+	return *gb.board
+}
+
 // return FEN of this game
 func (gb *GameBuilder) FEN() string {
 	return convfen.ConvertBoardToFEN(*gb.board)
@@ -165,6 +181,10 @@ func (gb *GameBuilder) InfoGame() *history.InfoGame {
 }
 
 // ---- Engine ----
+
+func (gb *GameBuilder) EngineWorker() engine.Engine {
+	return gb.engine
+}
 
 func (gb *GameBuilder) SetEngineWorker(e engine.Engine) {
 	gb.engine = e
@@ -205,7 +225,7 @@ func (gb *GameBuilder) EngineMove() base.GameStatus {
 	}
 
 	info := gb.engine.BestNow()
-	mv := info.GetBestMove(gb.board)
+	mv := info.GetBestMove(gb.board.Mailbox)
 	if mv == nil {
 		return base.InvalidGame
 	}

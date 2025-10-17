@@ -1,7 +1,7 @@
 package gfont
 
 import (
-	"os"
+	"evilchess/ui/gui/gbase/gos"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -18,7 +18,7 @@ func LoadFonts(workdir string) (*Fonts, error) {
 	var err error
 
 	// read ttf
-	ps2p, err := os.ReadFile(workdir + "/PressStart2P-Regular.ttf")
+	ps2p, err := gos.ReadFile(workdir + "/PressStart2P-Regular.ttf")
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func LoadFonts(workdir string) (*Fonts, error) {
 	}
 
 	// read ttf
-	nsd, err := os.ReadFile(workdir + "/NotoSansDisplay-Regular.ttf")
+	nsd, err := gos.ReadFile(workdir + "/NotoSansDisplay-Regular.ttf")
 	if err != nil {
 		return nil, err
 	}

@@ -1,3 +1,5 @@
+# $env:GOOS="wasip1"; $env:GOARCH="wasm"; go build -ldflags="-s -w"
+# $env:GOOS="wasip1"; $env:GOARCH="wasm"; go build -o main.wasm main.go
 $env:GOOS="js"; $env:GOARCH="wasm"; go build -o main.wasm main.go
 
 Copy-Item -Path "$(go env GOROOT)\lib\wasm\wasm_exec.js" -Destination .

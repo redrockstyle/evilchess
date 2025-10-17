@@ -2,6 +2,7 @@ package logx
 
 import (
 	"io"
+	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -54,7 +55,12 @@ func GetLoggerLevelByString(lvl string) zapcore.Level {
 }
 
 func (l *Logx) InitLogger(w io.Writer) {
-	logWriter := zapcore.AddSync(w)
+	var logWriter zapcore.WriteSyncer
+	if l.console {
+		logWriter = zapcore.AddSync(os.Stdout)
+	} else {
+		logWriter = zapcore.AddSync(w)
+	}
 
 	var encoderCfg zapcore.EncoderConfig
 	if l.dev {

@@ -261,7 +261,7 @@ func PsuedoLegalKingMoves(b *base.Board, fromIdx int, out *[]base.Move) {
 		}
 	}
 
-	// Castling (simplified): проверяем права и пустые клетки и отсутствие атак по маршруту
+	// Castling (simplified)
 	if white {
 		// white king assumed at e1: H=0,W=4
 		if p == base.WKing && from.H == 0 && from.W == 4 {

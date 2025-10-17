@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"evilchess/ui/gui/gbase/gconf"
+	"evilchess/ui/gui/gbase/gos"
 	"fmt"
-	"os"
 )
 
 type LangType int
@@ -66,7 +66,7 @@ func (lw *GUILangWorker) GetLang() LangType {
 
 func (lw *GUILangWorker) SetLang(l LangType) error {
 	lw.lang = l
-	data, err := os.ReadFile(lw.workdir + "/" + lw.langTypeToJsonName())
+	data, err := gos.ReadFile(lw.workdir + "/" + lw.langTypeToJsonName())
 	if err != nil {
 		return err
 	}

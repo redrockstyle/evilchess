@@ -54,6 +54,7 @@ const (
 	Check       GameStatus = 10
 	Checkmate   GameStatus = 11
 	Stalemate   GameStatus = 12
+	Draw        GameStatus = 13
 	InvalidGame GameStatus = 88
 	Pass        GameStatus = 99
 )
@@ -66,6 +67,8 @@ func (gs GameStatus) String() string {
 		return "checkmate"
 	case Stalemate:
 		return "stalemate"
+	case Draw:
+		return "draw"
 	case Pass:
 		return "pass"
 	default:
@@ -355,4 +358,31 @@ func IsPossibleCasting(m Mailbox, whiteToMove, longCast, strict bool) bool {
 	}
 
 	return true
+}
+
+// check promotion
+func IsPawnPromotionFromIndices(mb *Mailbox, fromIdx, toIdx int) bool {
+	if mb == nil {
+		return false
+	}
+	if fromIdx < 0 || fromIdx > 63 || toIdx < 0 || toIdx > 63 {
+		return false
+	}
+
+	pc := mb[fromIdx]
+	if pc == EmptyPiece {
+		return false
+	}
+
+	// helper: rank 0..7 where 0 == bottom (a1)
+	toRank := toIdx / 8
+
+	switch pc {
+	case WPawn:
+		return toRank == 7
+	case BPawn:
+		return toRank == 0
+	default:
+		return false
+	}
 }

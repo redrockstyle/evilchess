@@ -20,7 +20,7 @@ const logfile string = "evilchess.log"
 func GetLogger(file *os.File, c *cli.Command) *logx.Logx {
 	l := logx.NewLogx(
 		logx.GetLoggerLevelByString(c.String("level")),
-		c.Bool("debug"),
+		c.Bool("dev"),
 		c.Bool("console"),
 	)
 	l.InitLogger(file)
@@ -52,19 +52,20 @@ func RunEvilChess() error {
 		Usage: "path to PGN file",
 	}
 	df := &cli.BoolFlag{
-		Name:    "debug",
+		Name:    "dev",
 		Aliases: []string{"d"},
-		Usage:   "enable debug mod",
+		Usage:   "dev encode log",
 	}
-	lf := &cli.BoolFlag{
-		Name:    "level",
-		Aliases: []string{"l"},
-		Usage:   "logger level",
+	lf := &cli.StringFlag{
+		Name:        "level",
+		Aliases:     []string{"l"},
+		Usage:       "level log",
+		DefaultText: "info",
 	}
 	cf := &cli.BoolFlag{
 		Name:    "console",
 		Aliases: []string{"c"},
-		Usage:   "console logger encoding",
+		Usage:   "console log",
 	}
 	cliff := []cli.Flag{ff, pf, df, lf, cf}
 	guiff := []cli.Flag{df, lf, cf}

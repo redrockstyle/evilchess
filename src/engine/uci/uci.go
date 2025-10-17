@@ -46,6 +46,8 @@ type UCIExecutor struct {
 	lines       chan string
 	bestMoveCh  chan struct{}
 	logx        logx.Logger
+
+	lastBoard base.Board
 }
 
 // to open a process, need to call Init()
@@ -116,12 +118,20 @@ func (e *UCIExecutor) Exec(cmd string) error {
 }
 
 func (e *UCIExecutor) SetPosition(b *base.Board) error {
+	// store last board for parsing PV -> base.Move
+	e.mu.Lock()
+	e.lastBoard = *b
+	e.mu.Unlock()
+
 	return e.SetPositionFEN(convfen.ConvertBoardToFEN(*b))
 }
 
 func (e *UCIExecutor) SetPositionFEN(fen string) error {
 	if tu, err := convfen.ConvertFENToBoard(fen); err == nil { // pizdec reshenie XD
+		e.mu.Lock()
+		e.lastBoard = *tu
 		e.whiteToMove = tu.WhiteToMove
+		e.mu.Unlock()
 	}
 
 	e.logx.Debugf("init postition FEN: %s\n", fen)
@@ -238,7 +248,7 @@ func (e *UCIExecutor) Subscribe(ch chan<- engine.AnalysisInfo) (unsubscribe func
 
 // Terminate process
 func (e *UCIExecutor) Close() {
-	if e.cmd != nil {
+	if e.cmd == nil {
 		return
 	}
 	e.mu.Lock()
@@ -355,36 +365,49 @@ func (e *UCIExecutor) stdoutLoop(ctx context.Context) {
 	}
 }
 
+// type AnalysisInfo struct {
+// 	Depth       int         // текущая глубина
+// 	TimeMs      int64       // прошедшее время в ms
+// 	Nodes       int64       // число просмотренных узлов
+// 	NPS         int64       // nodes per second
+// 	ScoreCP     int         // оценка в сантиматах (+ = advantage for side to move)
+// 	MateIn      int         // mate in N plies (0 if none)
+// 	PV          []base.Move // principal variation (список ходов, начиная с best)
+// 	BestMove    *base.Move  // лучший ход на данный момент (ссылка на первый ход PV)
+// 	UCIPV       []string
+// 	UCIBestMove string
+// }
+
 func (e *UCIExecutor) saveInfo(info string) {
 	preinfo := engine.AnalysisInfo{}
 	fld := strings.Fields(info)
-	len := len(fld)
-	for i := 0; i < len; i++ {
+	n := len(fld)
+	for i := 0; i < n; i++ {
 		switch fld[i] {
 		case "depth":
-			if i+1 < len {
+			if i+1 < n {
 				preinfo.Depth, _ = strconv.Atoi(fld[i+1])
 				i++
 			}
 		case "nodes":
-			if i+1 < len {
+			if i+1 < n {
 				preinfo.Nodes, _ = strconv.ParseInt(fld[i+1], 10, 64)
 				i++
 			}
 		case "nps":
-			if i+1 < len {
-				preinfo.Nodes, _ = strconv.ParseInt(fld[i+1], 10, 64)
+			if i+1 < n {
+				preinfo.NPS, _ = strconv.ParseInt(fld[i+1], 10, 64)
 				i++
 			}
 		case "time":
-			if i+1 < len {
+			if i+1 < n {
 				if v, err := strconv.ParseInt(fld[i+1], 10, 64); err == nil {
 					preinfo.TimeMs = v
 				}
 				i++
 			}
 		case "score":
-			if i+2 < len {
+			if i+2 < n {
 				typ := fld[i+1]
 				val := fld[i+2]
 				if typ == "cp" {
@@ -394,28 +417,56 @@ func (e *UCIExecutor) saveInfo(info string) {
 					}
 				} else if typ == "mate" {
 					if v, err := strconv.Atoi(val); err == nil {
-						// UCI mate is in plies to mate (positive or negative)
 						preinfo.MateIn = v
 					}
 				}
 				i += 2
 			}
 		case "pv":
-			if i+1 < len {
-				pv := make([]string, 0, len-i-1)
-				for j := i + 1; j < len; j++ {
-					pv = append(pv, fld[j])
+			if i+1 < n {
+				pvStrs := make([]string, 0, n-i-1)
+				for j := i + 1; j < n; j++ {
+					pvStrs = append(pvStrs, fld[j])
 				}
-				preinfo.UCIPV = pv
-				preinfo.UCIBestMove = pv[len-i-2]
-				i = len // done, bc pv tag is always last
+				preinfo.UCIPV = pvStrs
+				if len(pvStrs) > 0 {
+					preinfo.UCIBestMove = pvStrs[0]
+				}
+				// try to parse PV -> []base.Move using lastBoard (if available)
+				e.mu.RLock()
+				last := e.lastBoard // copy
+				e.mu.RUnlock()
+
+				if len(last.Mailbox) > 0 {
+					parsedPV := make([]base.Move, 0, len(pvStrs))
+					for _, s := range pvStrs {
+						if pm := parseUCIStringToMove(s, last.Mailbox); pm != nil {
+							parsedPV = append(parsedPV, *pm)
+						} else {
+							break // can't parse further — stop
+						}
+					}
+					if len(parsedPV) > 0 {
+						preinfo.PV = parsedPV
+						// BestMove -> pointer to copy of first element
+						mv0 := parsedPV[0]
+						preinfo.BestMove = &mv0
+					}
+				}
+				// pv tag is last in common UCI "info" lines; break parsing
+				i = n
 			}
 		default:
-			// skip like "seldepth", "currmove" etc
+			// skip
 		}
 	}
+
+	// write into shared e.info and publish
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.info = preinfo
+	e.mu.Unlock()
+
+	// publish a copy to subscribers
 	e.publish(preinfo)
 }
 
@@ -424,21 +475,42 @@ func (e *UCIExecutor) saveBest(best string) {
 	f := strings.Fields(best)
 	if len(f) >= 2 {
 		bm := f[1]
+
 		e.mu.Lock()
 		e.running = false
-
+		// set UCIBestMove
 		e.info.UCIBestMove = bm
-		if len(e.info.PV) == 0 && e.info.BestMove != nil {
-			e.info.UCIPV = []string{bm}
+
+		// if PV empty, try to set PV/basic BestMove from bm using lastBoard
+		if len(e.info.PV) == 0 {
+			e.mu.RUnlock() // temporarily unlock to use parse util that takes lastBoard under RLock (we'll lock again below)
+			e.mu.RLock()
+			last := e.lastBoard
+			e.mu.RUnlock()
+
+			if len(last.Mailbox) > 0 {
+				if pm := parseUCIStringToMove(bm, last.Mailbox); pm != nil {
+					// put into e.info (we already have e.mu locked above, so relock)
+					e.mu.Lock()
+					e.info.PV = []base.Move{*pm}
+					mv0 := *pm
+					e.info.BestMove = &mv0
+					e.mu.Unlock()
+				} else {
+					e.mu.Unlock()
+				}
+			} else {
+				e.mu.Unlock()
+			}
+		} else {
+			e.mu.Unlock()
 		}
 
+		// notify WaitDone() (non-blocking)
 		select {
-		// signal to WaitDone()
 		case e.bestMoveCh <- struct{}{}:
 		default:
 		}
-
-		e.mu.Unlock()
 	}
 }
 
@@ -452,4 +524,76 @@ func (e *UCIExecutor) publish(info engine.AnalysisInfo) {
 		default:
 		}
 	}
+}
+
+// return *base.Move or nil
+func parseUCIStringToMove(u string, mailbox base.Mailbox) *base.Move {
+	if len(u) < 4 {
+		return nil
+	}
+	from := u[0:2]
+	to := u[2:4]
+
+	fromIdx, err := base.SquareFromAlgebraic(from)
+	if err != nil {
+		return nil
+	}
+	toIdx, err := base.SquareFromAlgebraic(to)
+	if err != nil {
+		return nil
+	}
+
+	mv := base.Move{
+		From: base.ConvIndexToPoint(fromIdx),
+		To:   base.ConvIndexToPoint(toIdx),
+	}
+
+	// determine piece on from-square (if any)
+	p := mailbox[fromIdx]
+	mv.Piece = p
+
+	// promotion (e2e8q or e7e8q) - optional 5th char
+	if len(u) >= 5 {
+		c := u[4]
+		isWhite := false
+		switch p {
+		case base.WPawn, base.WKing, base.WQueen, base.WBishop, base.WKnight, base.WRook:
+			isWhite = true
+		case base.BPawn, base.BKing, base.BQueen, base.BBishop, base.BKnight, base.BRook:
+			isWhite = false
+		default:
+			// fallback: infer color from char? best-effort skip
+			isWhite = true
+		}
+		switch c {
+		case 'q', 'Q':
+			if isWhite {
+				mv.Piece = base.WQueen
+			} else {
+				mv.Piece = base.BQueen
+			}
+		case 'r', 'R':
+			if isWhite {
+				mv.Piece = base.WRook
+			} else {
+				mv.Piece = base.BRook
+			}
+		case 'b', 'B':
+			if isWhite {
+				mv.Piece = base.WBishop
+			} else {
+				mv.Piece = base.BBishop
+			}
+		case 'n', 'N':
+			if isWhite {
+				mv.Piece = base.WKnight
+			} else {
+				mv.Piece = base.BKnight
+			}
+		default:
+			// unknown char -> leave mv.Piece as original (best-effort)
+		}
+	}
+
+	return &mv
 }

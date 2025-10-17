@@ -57,14 +57,15 @@ type GUIPlayDrawer struct {
 	engineDoneCh   chan struct{}
 
 	// buttons
-	msg          *ghelper.MessageBox
-	buttons      []*ghelper.Button
-	btnResignIdx int
-	btnFlipIdx   int
-	btnEngineIdx int
-	btnUndoIdx   int
-	btnRedoIdx   int
-	btnBackIdx   int
+	msg           *ghelper.MessageBox
+	buttons       []*ghelper.Button
+	btnResignIdx  int
+	btnFlipIdx    int
+	btnEngineIdx  int
+	btnAnalyzeIdx int
+	btnUndoIdx    int
+	btnRedoIdx    int
+	btnBackIdx    int
 
 	prevMouseDown bool
 
@@ -95,21 +96,20 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 	pd.dragThreshold = 6
 	pd.dragStartSq = -1
 
-	if ctx.Config.PlayAs == "black" {
-		pd.flipped = true
-	} else if ctx.Config.PlayAs == "random" {
-		pd.flipped = pd.lastTick.Second()%2 == 1
-	} else {
-		pd.flipped = false
-	}
-
 	if !ctx.IsReady {
 		ctx.Builder = src.NewBuilderBoard(ctx.Logx)
 		ctx.Builder.CreateClassic()
 	} else if ctx.Builder.Status() == base.InvalidGame {
 		ctx.Builder.CreateClassic()
+		if ctx.Config.PlayAs == "black" {
+			pd.flipped = true
+		} else if ctx.Config.PlayAs == "random" {
+			pd.flipped = pd.lastTick.Second()%2 == 1
+		} else {
+			pd.flipped = false
+		}
 	} else {
-		pd.maybeShowStatus(ctx)
+		pd.flipped = !ctx.Builder.IsWhiteToMove()
 	}
 
 	if ctx.Config.UseEngine {
@@ -138,6 +138,8 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 	y += h + 14
 	pd.btnEngineIdx, pd.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("play.engine_go"), x, y, w, h, pd.buttons)
 	y += h + 14
+	pd.btnAnalyzeIdx, pd.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("play.analyze"), x, y, w, h, pd.buttons)
+	y += h + 14
 	pd.btnBackIdx, pd.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.back"), x, y, w, h, pd.buttons)
 
 	if ctx.Config.Training || ctx.Config.Debug {
@@ -146,6 +148,8 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 	}
 
 	pd.msg = &ghelper.MessageBox{}
+	pd.status = ctx.Builder.Status()
+	pd.maybeShowStatus(ctx)
 	return pd
 }
 
@@ -202,15 +206,15 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	justReleased := !mouseDown && pd.prevMouseDown
 	pd.prevMouseDown = mouseDown
 
+	pd.msg.Update(ctx, mx, my, justReleased)
+	pd.msg.AnimateMessage()
+	if pd.msg.IsOverlayed() {
+		return SceneNotChanged, nil
+	}
+
 	// if message box open -> handle clicks on it
 	if pd.msg.Open {
-		if justPressed {
-			// check OK button area in modal coords (we place it centered)
-			// Modal geometry: centered rectangle
-			bounds := text.BoundString(ctx.AssetsWorker.Fonts().Normal, ctx.AssetsWorker.Lang().T("play.flip_warning"))
-			pd.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
-		}
-		// animate open/close
+		pd.msg.Update(ctx, mx, my, justReleased)
 		pd.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
@@ -255,6 +259,16 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 						pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.no_engine"), nil)
 					}
 				}
+			case pd.btnAnalyzeIdx:
+				b := ctx.Builder.CurrentPosition()
+				if status, err := ctx.Builder.CreateFromBoard(&b); err != nil || status == base.InvalidGame {
+					ctx.Logx.Errorf("Bad Position: status->%s err->%v", status.String(), err)
+					pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("editor.apply_failed"), nil)
+				} else {
+					// apply successful -> switch to Play scene
+					ctx.IsReady = true
+					return SceneAnalyzer, nil
+				}
 			case pd.btnBackIdx:
 				ctx.IsReady = false
 				return SceneMenu, nil
@@ -263,151 +277,176 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	}
 
 	// Board interaction: drag & click-click with movement threshold
-	if inBoard(mx, my, pd.boardX, pd.boardY, pd.sqSize) && !pd.engineThinking && !pd.msg.Open {
-		sq := pixelToSquare(mx, my, pd.boardX, pd.boardY, pd.sqSize, pd.flipped)
+	if !pd.allblock || ctx.Config.Debug || ctx.Config.Training {
+		if inBoard(mx, my, pd.boardX, pd.boardY, pd.sqSize) && !pd.engineThinking && !pd.msg.Open {
+			sq := pixelToSquare(mx, my, pd.boardX, pd.boardY, pd.sqSize, pd.flipped)
 
-		// mouse pressed -> prepare possible drag
-		if justPressed && !pd.pendingDrag && !pd.engineThinking {
-			mb := ctx.Builder.CurrentBoard()
-			piece := base.GetPieceAt(&mb, base.ConvIndexToPoint(sq))
-			// always remember where press started
-			pd.dragStartSq = sq
-			pd.dragStartX = mx
-			pd.dragStartY = my
+			// mouse pressed -> prepare possible drag
+			if justPressed && !pd.pendingDrag && !pd.engineThinking {
+				mb := ctx.Builder.CurrentBoard()
+				piece := base.GetPieceAt(&mb, base.ConvIndexToPoint(sq))
+				// always remember where press started
+				pd.dragStartSq = sq
+				pd.dragStartX = mx
+				pd.dragStartY = my
 
-			if piece != base.EmptyPiece && pd.isPieceOwnedByPlayer(ctx, piece) {
-				// mark possible drag start
-				pd.pendingDrag = true
-				// prepare drag image but only set pd.dragImg when real dragging begins
+				if piece != base.EmptyPiece && pd.isPieceOwnedByPlayer(ctx, piece) {
+					// mark possible drag start
+					pd.pendingDrag = true
+					// prepare drag image but only set pd.dragImg when real dragging begins
 
-				// pd.dragImg = ctx.AssetsWorker.Piece(piece)
-				pd.dragImg = pd.scaledPieces[piece]
-			} else {
-				// click started on empty or opponent piece — not a pending drag
-				pd.pendingDrag = false
-			}
-		}
-
-		// while mouse held, check movement to start real dragging
-		if mouseDown && pd.pendingDrag && !pd.dragging {
-			dx := mx - pd.dragStartX
-			dy := my - pd.dragStartY
-			if dx*dx+dy*dy >= pd.dragThreshold*pd.dragThreshold {
-				// start real drag
-				pd.dragging = true
-				pd.dragFrom = pd.dragStartSq
-				// compute offset inside square
-				sqPx, sqPy := pd.indexToScreenXY(pd.dragFrom)
-				pd.dragOffsetX = pd.dragStartX - sqPx
-				pd.dragOffsetY = pd.dragStartY - sqPy
-				// now visually show selection while dragging
-				pd.selectedSq = pd.dragFrom
-			}
-		}
-
-		if justReleased {
-			// 1) if we were dragging -> drop to `sq`
-			if pd.dragging {
-				if pd.dragFrom != sq {
-					mb := ctx.Builder.CurrentBoard()
-					mv := base.Move{
-						From:  base.ConvIndexToPoint(pd.dragFrom),
-						To:    base.ConvIndexToPoint(sq),
-						Piece: base.GetPieceAt(&mb, base.ConvIndexToPoint(pd.dragFrom)),
-					}
-					ctx.Logx.Debugf("dragging attempt move from=%d to=%d", pd.dragFrom, sq)
-					if !pd.started {
-						pd.started = true
-					}
-					pd.status = ctx.Builder.Move(mv)
-					pd.maybeShowStatus(ctx)
-					if pd.status != base.InvalidGame {
-						pd.maybeStartEngine(ctx)
-					}
+					// pd.dragImg = ctx.AssetsWorker.Piece(piece)
+					pd.dragImg = pd.scaledPieces[piece]
+				} else {
+					// click started on empty or opponent piece — not a pending drag
+					pd.pendingDrag = false
 				}
-				// cleanup drag state
-				pd.dragging = false
-				pd.pendingDrag = false
-				pd.dragFrom = -1
-				pd.dragImg = nil
-				pd.selectedSq = -1
-				pd.dragStartSq = -1
-
 			}
 
-			// 2) Not dragging: handle click-click logic
-			// If there is a selection already -> second click -> attempt move
-			if pd.selectedSq != -1 {
-				// second click: try move selectedSq -> sq
-				if pd.selectedSq != sq {
-					mb := ctx.Builder.CurrentBoard()
-					pntSq := base.ConvIndexToPoint(sq)
-					pntSelectedSq := base.ConvIndexToPoint(pd.selectedSq)
-					pieceSq := base.GetPieceAt(&mb, pntSq)
-					piece := base.GetPieceAt(&mb, pntSelectedSq)
-					if pieceSq != base.EmptyPiece && pd.isPieceOwnedByPlayer(ctx, pieceSq) {
-						pd.selectedSq = sq
-					} else if piece == base.EmptyPiece || !pd.isPieceOwnedByPlayer(ctx, piece) {
-						// sanity check failed — clear selection
-						pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
-						pd.selectedSq = -1
-					} else {
-						ctx.Logx.Debugf("click-click attempt move from=%d to=%d", pd.selectedSq, sq)
+			// while mouse held, check movement to start real dragging
+			if mouseDown && pd.pendingDrag && !pd.dragging {
+				dx := mx - pd.dragStartX
+				dy := my - pd.dragStartY
+				if dx*dx+dy*dy >= pd.dragThreshold*pd.dragThreshold {
+					// start real drag
+					pd.dragging = true
+					pd.dragFrom = pd.dragStartSq
+					// compute offset inside square
+					sqPx, sqPy := pd.indexToScreenXY(pd.dragFrom)
+					pd.dragOffsetX = pd.dragStartX - sqPx
+					pd.dragOffsetY = pd.dragStartY - sqPy
+					// now visually show selection while dragging
+					pd.selectedSq = pd.dragFrom
+				}
+			}
+
+			if justReleased {
+				// 1) if we were dragging -> drop to `sq`
+				if pd.dragging {
+					if pd.dragFrom != sq {
+						mb := ctx.Builder.CurrentBoard()
 						mv := base.Move{
-							From:  base.ConvIndexToPoint(pd.selectedSq),
+							From:  base.ConvIndexToPoint(pd.dragFrom),
 							To:    base.ConvIndexToPoint(sq),
-							Piece: piece,
+							Piece: base.GetPieceAt(&mb, base.ConvIndexToPoint(pd.dragFrom)),
 						}
+						ctx.Logx.Debugf("dragging attempt move from=%d to=%d", pd.dragFrom, sq)
 						if !pd.started {
 							pd.started = true
 						}
-						pd.status = ctx.Builder.Move(mv)
-						pd.maybeShowStatus(ctx)
-						if pd.status != base.InvalidGame {
-							pd.maybeStartEngine(ctx)
+						if base.IsPawnPromotionFromIndices(&mb, pd.dragFrom, sq) {
+							// ad.msg.ShowMessageWithChoices(ctx.AssetsWorker.Lang().T("play.promote"), *GetChoises(ctx, ctx.Builder.IsWhiteToMove()), func(idx int, v interface{}) {
+							pd.msg.ShowMessageWithChoices("", *GetChoises(ctx, ctx.Builder.IsWhiteToMove()), func(idx int, v interface{}) {
+								mv.Piece = v.(base.Piece)
+								pd.status = ctx.Builder.Move(mv)
+								pd.maybeShowStatus(ctx)
+								if pd.status != base.InvalidGame {
+									pd.maybeStartEngine(ctx)
+								}
+							})
+						} else {
+							pd.status = ctx.Builder.Move(mv)
+							pd.maybeShowStatus(ctx)
+							if pd.status != base.InvalidGame {
+								pd.maybeStartEngine(ctx)
+							}
 						}
-						// after attempt clear selection (regardless of result)
+					}
+					// cleanup drag state
+					pd.dragging = false
+					pd.pendingDrag = false
+					pd.dragFrom = -1
+					pd.dragImg = nil
+					pd.selectedSq = -1
+					pd.dragStartSq = -1
+
+				}
+
+				// 2) Not dragging: handle click-click logic
+				// If there is a selection already -> second click -> attempt move
+				if pd.selectedSq != -1 {
+					// second click: try move selectedSq -> sq
+					if pd.selectedSq != sq {
+						mb := ctx.Builder.CurrentBoard()
+						pntSq := base.ConvIndexToPoint(sq)
+						pntSelectedSq := base.ConvIndexToPoint(pd.selectedSq)
+						pieceSq := base.GetPieceAt(&mb, pntSq)
+						piece := base.GetPieceAt(&mb, pntSelectedSq)
+						if pieceSq != base.EmptyPiece && pd.isPieceOwnedByPlayer(ctx, pieceSq) {
+							pd.selectedSq = sq
+						} else if piece == base.EmptyPiece || !pd.isPieceOwnedByPlayer(ctx, piece) {
+							// sanity check failed — clear selection
+							pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
+							pd.selectedSq = -1
+						} else {
+							ctx.Logx.Debugf("click-click attempt move from=%d to=%d", pd.selectedSq, sq)
+							mv := base.Move{
+								From:  base.ConvIndexToPoint(pd.selectedSq),
+								To:    base.ConvIndexToPoint(sq),
+								Piece: piece,
+							}
+							if !pd.started {
+								pd.started = true
+							}
+							if base.IsPawnPromotionFromIndices(&mb, pd.selectedSq, sq) {
+								// ad.msg.ShowMessageWithChoices(ctx.AssetsWorker.Lang().T("play.promote"), *GetChoises(ctx, ctx.Builder.IsWhiteToMove()), func(idx int, v interface{}) {
+								pd.msg.ShowMessageWithChoices("", *GetChoises(ctx, ctx.Builder.IsWhiteToMove()), func(idx int, v interface{}) {
+									mv.Piece = v.(base.Piece)
+									pd.status = ctx.Builder.Move(mv)
+									pd.maybeShowStatus(ctx)
+									if pd.status != base.InvalidGame {
+										pd.maybeStartEngine(ctx)
+									}
+								})
+							} else {
+								pd.status = ctx.Builder.Move(mv)
+								pd.maybeShowStatus(ctx)
+								if pd.status != base.InvalidGame {
+									pd.maybeStartEngine(ctx)
+								}
+							}
+							// after attempt clear selection (regardless of result)
+							pd.selectedSq = -1
+						}
+					} else {
+						// clicked same square -> toggle off selection
 						pd.selectedSq = -1
 					}
-				} else {
-					// clicked same square -> toggle off selection
-					pd.selectedSq = -1
+					// reset pending info
+					pd.pendingDrag = false
+					pd.dragStartSq = -1
+
 				}
-				// reset pending info
-				pd.pendingDrag = false
-				pd.dragStartSq = -1
 
+				// 3) No current selection: this is first click (press+release without drag)
+				// If press started on a player's piece (pendingDrag was true) -> select that source square.
+				if pd.pendingDrag && pd.dragStartSq >= 0 {
+					// select source square (use dragStartSq to be precise)
+					pd.selectedSq = pd.dragStartSq
+					// keep pendingDrag false now (we consumed it as a click selection)
+					pd.pendingDrag = false
+					pd.dragStartSq = -1
+				} else {
+					// pressed & released on empty square (nothing to do)
+					pd.pendingDrag = false
+					pd.dragStartSq = -1
+				}
 			}
 
-			// 3) No current selection: this is first click (press+release without drag)
-			// If press started on a player's piece (pendingDrag was true) -> select that source square.
-			if pd.pendingDrag && pd.dragStartSq >= 0 {
-				// select source square (use dragStartSq to be precise)
-				pd.selectedSq = pd.dragStartSq
-				// keep pendingDrag false now (we consumed it as a click selection)
-				pd.pendingDrag = false
-				pd.dragStartSq = -1
-			} else {
-				// pressed & released on empty square (nothing to do)
+		} else {
+			// clicked outside board -> cancel pending/select/drag on release
+			if justReleased {
+				pd.selectedSq = -1
+				if pd.dragging {
+					pd.dragging = false
+					pd.dragFrom = -1
+					pd.dragImg = nil
+				}
 				pd.pendingDrag = false
 				pd.dragStartSq = -1
 			}
-		}
-
-	} else {
-		// clicked outside board -> cancel pending/select/drag on release
-		if justReleased {
-			pd.selectedSq = -1
-			if pd.dragging {
-				pd.dragging = false
-				pd.dragFrom = -1
-				pd.dragImg = nil
-			}
-			pd.pendingDrag = false
-			pd.dragStartSq = -1
 		}
 	}
-
 	// if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
 	// 	if ctx.Config.Training || ctx.Config.Debug {
 	// 		_ = ctx.Builder.Undo()
@@ -449,6 +488,9 @@ func (pd *GUIPlayDrawer) maybeShowStatus(ctx *ghelper.GUIGameContext) {
 	case base.Checkmate:
 		pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.checkmate"), nil)
 		pd.allblock = true
+	case base.Draw:
+		pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.draw"), nil)
+		pd.allblock = true
 	case base.InvalidGame:
 		if ctx.Config.Debug || ctx.Config.Training {
 			pd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("play.bad_move"), nil)
@@ -470,10 +512,9 @@ func (pd *GUIPlayDrawer) maybeStartEngine(ctx *ghelper.GUIGameContext) {
 		return
 	}
 
-	// decide which color is the human player (same logic как в isPieceOwnedByPlayer)
+	// decide which color is the human player
 	playerIsWhite := !pd.flipped
 	if ctx.Builder.IsWhiteToMove() != playerIsWhite {
-		// небольшая пауза, чтобы пользователь успел увидеть свой ход
 		go func() {
 			time.Sleep(120 * time.Millisecond) // 0.12s
 			pd.startEngineMoveAsync(ctx)
@@ -493,13 +534,11 @@ func (pd *GUIPlayDrawer) isPieceOwnedByPlayer(ctx *ghelper.GUIGameContext, p bas
 	}
 
 	playerIsWhite := !pd.flipped
-	// если фигура принадлежит игроку
 	if isWhitePiece != playerIsWhite {
 		return false
 	}
 
 	if !(ctx.Config.Debug || ctx.Config.UseEngine == false || ctx.Config.Training) {
-		// если ход игрока
 		if ctx.Builder.IsWhiteToMove() != playerIsWhite {
 			return false
 		}
@@ -648,9 +687,10 @@ func (pd *GUIPlayDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 	}
 
 	// draw message box if open
-	if pd.msg.Open || pd.msg.Animating {
-		DrawModal(ctx, pd.msg.Scale, pd.msg.Text, screen)
-	}
+	// if pd.msg.Open || pd.msg.Animating {
+	// 	DrawModal(ctx, pd.msg.Scale, pd.msg.Text, screen)
+	// }
+	pd.msg.Draw(ctx, screen)
 
 	if ctx.Config.Debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
@@ -753,3 +793,29 @@ func (pd *GUIPlayDrawer) indexToScreenXY(idx int) (x, y int) {
 // 	rank := fy
 // 	return rank*8 + file
 // }
+
+func GetWhiteChoices(ctx *ghelper.GUIGameContext) *[]ghelper.MessageChoice {
+	return &[]ghelper.MessageChoice{
+		{Image: ctx.AssetsWorker.Piece(base.WQueen), Value: base.WQueen},
+		{Image: ctx.AssetsWorker.Piece(base.WRook), Value: base.WRook},
+		{Image: ctx.AssetsWorker.Piece(base.WBishop), Value: base.WBishop},
+		{Image: ctx.AssetsWorker.Piece(base.WKnight), Value: base.WKnight},
+	}
+}
+
+func GetBlackChoices(ctx *ghelper.GUIGameContext) *[]ghelper.MessageChoice {
+	return &[]ghelper.MessageChoice{
+		{Image: ctx.AssetsWorker.Piece(base.BQueen), Value: base.BQueen},
+		{Image: ctx.AssetsWorker.Piece(base.BRook), Value: base.BRook},
+		{Image: ctx.AssetsWorker.Piece(base.BBishop), Value: base.BBishop},
+		{Image: ctx.AssetsWorker.Piece(base.BKnight), Value: base.BKnight},
+	}
+}
+
+func GetChoises(ctx *ghelper.GUIGameContext, whiteToMove bool) *[]ghelper.MessageChoice {
+	if whiteToMove {
+		return GetWhiteChoices(ctx)
+	} else {
+		return GetBlackChoices(ctx)
+	}
+}

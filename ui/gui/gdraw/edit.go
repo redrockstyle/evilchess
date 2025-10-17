@@ -4,11 +4,11 @@ import (
 	"evilchess/src/base"
 	"evilchess/src/logic/convert/convfen"
 	"evilchess/ui/gui/ghelper"
+	"evilchess/ui/gui/ghelper/gclipboard"
 	"fmt"
 	"math"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -27,10 +27,13 @@ type GUIEditDrawer struct {
 	prevMouseDown bool
 	prevRightDown bool
 
+	// actual FEN
+	fen string
+
 	// selection & preview
-	selectedSq     int        // для move-mode: исходная клетка
-	previewPiece   base.Piece // выбранная фигура из палитры (EmptyPiece = none)
-	previewIsWhite bool       // true если выбран белый вариант
+	selectedSq     int
+	previewPiece   base.Piece
+	previewIsWhite bool
 
 	// modes
 	modePlace  bool
@@ -48,6 +51,7 @@ type GUIEditDrawer struct {
 	btnCastingBQ int
 	btnStartPos  int
 	btnFlip      int
+	btnTraining  int
 	btnClear     int
 	// clipboard
 	btnPaste int
@@ -57,8 +61,9 @@ type GUIEditDrawer struct {
 	btnMove   int
 	btnDelete int
 	// navigation
-	btnApply int
-	btnBack  int
+	btnPlay    int
+	btnAnalyze int
+	btnBack    int
 
 	// cache visuals
 	scaledPieces map[base.Piece]*ebiten.Image
@@ -69,8 +74,6 @@ type GUIEditDrawer struct {
 	lastTick time.Time
 }
 
-// NewGUIEditDrawer создает редактор позиции.
-// ctx — твой GUIGameContext (передаём везде).
 func NewGUIEditDrawer(ctx *ghelper.GUIGameContext) *GUIEditDrawer {
 	ed := &GUIEditDrawer{
 		selectedSq:     -1,
@@ -79,11 +82,13 @@ func NewGUIEditDrawer(ctx *ghelper.GUIGameContext) *GUIEditDrawer {
 		lastTick:       time.Now(),
 		msg:            &ghelper.MessageBox{},
 	}
-	ed.board.EnPassant = -1
-	ed.board.WhiteToMove = true
+	if b, _ := convfen.ConvertFENToBoard(base.FEN_EMPTY_GAME); b != nil {
+		ed.fen = base.FEN_EMPTY_GAME
+		ed.board = *b
+	}
 
 	spacingX, spacingY := 10, 16
-	// layout (по мотивам Play)
+	// layout
 	ed.boardSize = ctx.Config.WindowW - 400
 	if ed.boardSize < 320 {
 		ed.boardSize = 320
@@ -91,9 +96,6 @@ func NewGUIEditDrawer(ctx *ghelper.GUIGameContext) *GUIEditDrawer {
 	ed.sqSize = ed.boardSize / 8
 	ed.boardX = (ctx.Config.WindowW - ed.boardSize) / 2
 	ed.boardY = (ctx.Config.WindowH-ed.boardSize)/2 - 20
-
-	// copy mailbox from builder (ensure copy semantics)
-	// ed.mailbox = ctx.Builder.CurrentBoard() // TODO: ensure this returns a copy or clone appropriately
 
 	// prepare visuals cache
 	ed.prepareCache(ctx)
@@ -104,21 +106,23 @@ func NewGUIEditDrawer(ctx *ghelper.GUIGameContext) *GUIEditDrawer {
 	y := ed.boardY
 	w, h := 160, 44
 	// navigation
-	ed.btnApply, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.apply"), ctx.Config.WindowW-w-35, ctx.Config.WindowH-h-60, w, h, ed.buttons)
-	ed.btnBack, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.back"), ctx.Config.WindowW-w*2-spacingX*2-35, ctx.Config.WindowH-h-60, w, h, ed.buttons)
+	ed.btnPlay, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.play"), ctx.Config.WindowW-w-25, ctx.Config.WindowH-h-60, w, h, ed.buttons)
+	ed.btnAnalyze, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.analyze"), ctx.Config.WindowW-w*2-spacingX-25, ctx.Config.WindowH-h-60, w, h, ed.buttons)
+	ed.btnBack, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("button.back"), ctx.Config.WindowW-w*3-spacingX*2-25, ctx.Config.WindowH-h-60, w, h, ed.buttons)
 	// context board
 	ed.btnWhiteMove, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.move.white"), x, y, w/2-spacingX, h, ed.buttons)
 	ed.btnBlackMove, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.move.black"), x+w/2+spacingX, y, w/2-spacingX, h, ed.buttons)
 	ed.btnCastingWK, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.wk"), x, y+h+spacingY, w/2-spacingX, h, ed.buttons)
-	ed.btnCastingWQ, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.wq"), x+w/2+spacingX, y+h+spacingY, w/2-spacingX, h, ed.buttons)
-	ed.btnCastingBK, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.bk"), x, y+h*2+spacingY*2, w/2-spacingX, h, ed.buttons)
+	ed.btnCastingBK, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.bk"), x+w/2+spacingX, y+h+spacingY, w/2-spacingX, h, ed.buttons)
+	ed.btnCastingWQ, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.wq"), x, y+h*2+spacingY*2, w/2-spacingX, h, ed.buttons)
 	ed.btnCastingBQ, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.casting.bq"), x+w/2+spacingX, y+h*2+spacingY*2, w/2-spacingX, h, ed.buttons)
 	ed.btnStartPos, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.start_position"), x, y+h*3+spacingY*3, w, h, ed.buttons)
 	ed.btnFlip, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.flip"), x, y+h*4+spacingY*4, w, h, ed.buttons)
-	ed.btnClear, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.clear"), x, y+h*5+spacingY*5, w, h, ed.buttons)
+	ed.btnTraining, ed.buttons = ghelper.AppendButton(ctx, "", x, y+h*5+spacingY*5, w, h, ed.buttons)
+	ed.btnClear, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.clear"), x, y+h*6+spacingY*6, w, h, ed.buttons)
 	// clipboard
-	ed.btnPaste, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.paste_fen"), x, y+h*7+spacingY*7, w, h, ed.buttons)
-	ed.btnCopy, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.copy_fen"), x, y+h*8+spacingY*8, w, h, ed.buttons)
+	ed.btnPaste, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.paste_fen"), x, y+h*8+spacingY*7, w, h, ed.buttons)
+	ed.btnCopy, ed.buttons = ghelper.AppendButton(ctx, ctx.AssetsWorker.Lang().T("editor.copy_fen"), x, y+h*9+spacingY*8, w, h, ed.buttons)
 
 	// mode buttons near pieces
 	mBtnW, mBtnY := 140, 36
@@ -147,20 +151,14 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	rightDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight)
 	justPressed := mouseDown && !ed.prevMouseDown
-	// justReleased := !mouseDown && ed.prevMouseDown
+	justReleased := !mouseDown && ed.prevMouseDown
 	justRightPressed := rightDown && !ed.prevRightDown
 	ed.prevMouseDown = mouseDown
 	ed.prevRightDown = rightDown
 
 	// if message box open -> handle clicks on it
 	if ed.msg.Open {
-		if justPressed {
-			// check OK button area in modal coords (we place it centered)
-			// Modal geometry: centered rectangle
-			bounds := text.BoundString(ctx.AssetsWorker.Fonts().PixelLow, ctx.AssetsWorker.Lang().T("settings.save.success"))
-			ed.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
-		}
-		// animate open/close
+		ed.msg.Update(ctx, mx, my, justReleased)
 		ed.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
@@ -171,13 +169,23 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 		b.UpdateAnim(dt)
 		if clicked {
 			switch i {
-			case ed.btnApply:
+			case ed.btnPlay:
 				if status, err := ctx.Builder.CreateFromBoard(&ed.board); err != nil || status == base.InvalidGame {
+					ctx.Logx.Errorf("Bad Position: status->%s err->%v", status.String(), err)
 					ed.msg.ShowMessage(ctx.AssetsWorker.Lang().T("editor.apply_failed"), nil)
 				} else {
 					// apply successful -> switch to Play scene
 					ctx.IsReady = true
 					return ScenePlay, nil
+				}
+			case ed.btnAnalyze:
+				if status, err := ctx.Builder.CreateFromBoard(&ed.board); err != nil || status == base.InvalidGame {
+					ctx.Logx.Errorf("Bad Position: status->%s err->%v", status.String(), err)
+					ed.msg.ShowMessage(ctx.AssetsWorker.Lang().T("editor.apply_failed"), nil)
+				} else {
+					// apply successful -> switch to Play scene
+					ctx.IsReady = true
+					return SceneAnalyzer, nil
 				}
 			case ed.btnWhiteMove:
 				ed.board.WhiteToMove = true
@@ -203,7 +211,7 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				return SceneMenu, nil
 			case ed.btnPaste:
 				// read clipboard and try to CreateFromFEN (fallback to builder's CreateFromFEN if available)
-				if s, err := clipboard.ReadAll(); err == nil {
+				if s, err := gclipboard.ReadAll(); err == nil {
 					str := s
 					if len(s) > 60 {
 						str = s[:60] + "..."
@@ -216,6 +224,7 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 						} else {
 							ed.board = *b
 							ed.msg.ShowMessage(ctx.AssetsWorker.Lang().T("editor.fen_loaded"), nil)
+							ed.fen = convfen.ConvertBoardToFEN(ed.board)
 						}
 					})
 				} else {
@@ -223,7 +232,7 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				}
 			case ed.btnCopy:
 				fen := convfen.ConvertBoardToFEN(ed.board)
-				if err := clipboard.WriteAll(fen); err != nil {
+				if err := gclipboard.WriteAll(fen); err != nil {
 					ctx.Logx.Errorf("error copy FEN to clipboard: %v", err)
 					ed.msg.ShowMessage(ctx.AssetsWorker.Lang().T("message.copy.failed"), nil)
 				} else {
@@ -239,10 +248,13 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				// TODO: flipped
 				ed.msg.ShowMessage(ctx.AssetsWorker.Lang().T("message.todo"), nil)
 				//
+			case ed.btnTraining:
+				ctx.Config.Training = !ctx.Config.Training
 			case ed.btnClear:
-				ed.board = base.Board{}
-				ed.board.EnPassant = -1
-				ed.board.WhiteToMove = true
+				if b, _ := convfen.ConvertFENToBoard(base.FEN_EMPTY_GAME); b != nil {
+					ed.fen = base.FEN_EMPTY_GAME
+					ed.board = *b
+				}
 			case ed.btnPlace:
 				ed.modePlace = true
 				ed.modeMove = false
@@ -251,11 +263,18 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				ed.modePlace = false
 				ed.modeMove = true
 				ed.modeDelete = false
+
+				ed.selectedSq = -1
+				ed.previewPiece = base.EmptyPiece
 			case ed.btnDelete:
 				ed.modePlace = false
 				ed.modeMove = false
 				ed.modeDelete = true
+
+				ed.selectedSq = -1
+				ed.previewPiece = base.EmptyPiece
 			}
+			ed.fen = convfen.ConvertBoardToFEN(ed.board)
 		}
 	}
 
@@ -265,7 +284,7 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 		bx, by := ed.paletteBlackRect()
 
 		// check white palette column
-		if insideRect(mx, my, wx, wy, ed.sqSize, len(whitePaletteOrder())*(ed.sqSize+8)-8) {
+		if ghelper.InsideRect(mx, my, wx, wy, ed.sqSize, len(whitePaletteOrder())*(ed.sqSize+8)-8) {
 			cell := (my - wy) / (ed.sqSize + 8)
 			if cell >= 0 && cell < len(whitePaletteOrder()) {
 				piece := whitePaletteOrder()[cell]
@@ -273,16 +292,14 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 				ed.previewIsWhite = true
 
 			}
-		} else if insideRect(mx, my, bx, by, ed.sqSize, len(blackPaletteOrder())*(ed.sqSize+8)-8) {
+		} else if ghelper.InsideRect(mx, my, bx, by, ed.sqSize, len(blackPaletteOrder())*(ed.sqSize+8)-8) {
 			// check black palette column
 			cell := (my - by) / (ed.sqSize + 8)
 			if cell >= 0 && cell < len(blackPaletteOrder()) {
 				piece := blackPaletteOrder()[cell]
 				ed.previewPiece = piece
 				ed.previewIsWhite = false
-
 			}
-
 		}
 
 	}
@@ -323,6 +340,7 @@ func (ed *GUIEditDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 					ed.selectedSq = -1
 				}
 			}
+			ed.fen = convfen.ConvertBoardToFEN(ed.board)
 		}
 	}
 
@@ -340,6 +358,7 @@ func (ed *GUIEditDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 
 	// title
 	text.Draw(screen, ctx.AssetsWorker.Lang().T("editor.title"), ctx.AssetsWorker.Fonts().Bold, 40, 40, ctx.Theme.MenuText)
+	text.Draw(screen, fmt.Sprintf("FEN: %v", ed.fen), ctx.AssetsWorker.Fonts().Pixel, ed.boardX+20, ed.boardY-10, ctx.Theme.MenuText)
 	text.Draw(screen, ctx.AssetsWorker.Lang().T("editor.clipboard"), ctx.AssetsWorker.Fonts().PixelLow, ed.buttons[ed.btnPaste].X+35, ed.buttons[ed.btnPaste].Y-10, ctx.Theme.MenuText)
 
 	if ed.borderImg != nil {
@@ -439,7 +458,15 @@ func (ed *GUIEditDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 	// draw mode buttons (accent them if active)
 	for i, b := range ed.buttons {
 		// accent mode buttons
-		if (i == ed.btnPlace && ed.modePlace) ||
+		if i == ed.btnTraining {
+			if ctx.Config.Training {
+				b.Label = ctx.AssetsWorker.Lang().T("editor.training.on")
+				b.Image = ghelper.RenderRoundedRect(b.W, b.H, 12, ctx.Theme.Accent, ctx.Theme.ButtonStroke, 3)
+			} else {
+				b.Label = ctx.AssetsWorker.Lang().T("editor.training.off")
+				b.Image = ghelper.RenderRoundedRect(b.W, b.H, 12, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
+			}
+		} else if (i == ed.btnPlace && ed.modePlace) ||
 			(i == ed.btnMove && ed.modeMove) ||
 			(i == ed.btnDelete && ed.modeDelete) ||
 			(i == ed.btnWhiteMove && ed.board.WhiteToMove) ||
@@ -458,9 +485,10 @@ func (ed *GUIEditDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 	}
 
 	// message box
-	if ed.msg.Open || ed.msg.Animating {
-		DrawModal(ctx, ed.msg.Scale, ed.msg.Text, screen)
-	}
+	// if ed.msg.Open || ed.msg.Animating {
+	// 	DrawModal(ctx, ed.msg.Scale, ed.msg.Text, screen)
+	// }
+	ed.msg.Draw(ctx, screen)
 
 	// debug
 	if ctx.Config.Debug {
@@ -510,10 +538,6 @@ func (ed *GUIEditDrawer) indexToScreenXY(idx int) (x, y int) {
 	file := f
 	rank := 7 - r
 	return ed.boardX + file*ed.sqSize, ed.boardY + rank*ed.sqSize
-}
-
-func insideRect(px, py, x, y, w, h int) bool {
-	return px >= x && py >= y && px < x+w && py < y+h
 }
 
 // palette placement helpers

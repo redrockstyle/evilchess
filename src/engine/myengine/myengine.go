@@ -67,47 +67,6 @@ func (e *EvilEngine) SetPosition(b *base.Board) error {
 	return nil
 }
 
-func (e *EvilEngine) LevelToParams(lvl engine.LevelAnalyze) *engine.SearchParams {
-	switch lvl {
-	case engine.LevelOne:
-	case engine.LevelTwo:
-		return &engine.SearchParams{
-			MaxDepth:  0,
-			MaxTimeMs: 2000,
-			Infinite:  false,
-		}
-	case engine.LevelThree:
-	case engine.LevelFour:
-		return &engine.SearchParams{
-			MaxDepth:  0,
-			MaxTimeMs: 3000,
-			Infinite:  false,
-		}
-	case engine.LevelFive:
-	case engine.LevelSix:
-		return &engine.SearchParams{
-			MaxDepth:  0,
-			MaxTimeMs: 6000,
-			Infinite:  false,
-		}
-	case engine.LevelSeven:
-		return &engine.SearchParams{
-			MaxDepth:  0,
-			MaxTimeMs: 10000,
-			Infinite:  false,
-		}
-	case engine.LevelLast:
-	default:
-		break
-	}
-	return &engine.SearchParams{
-		MaxDepth:  0,
-		MaxTimeMs: 0,
-		Infinite:  false,
-	}
-}
-
-// StartAnalysis запускает поиск асинхронно. Если уже запущен — ошибка.
 func (e *EvilEngine) StartAnalysis(params engine.SearchParams) error {
 	e.mu.Lock()
 	if e.running {
@@ -141,7 +100,6 @@ func (e *EvilEngine) StartAnalysis(params engine.SearchParams) error {
 	return nil
 }
 
-// StopAnalysis — просит остановиться (мягко)
 func (e *EvilEngine) StopAnalysis() error {
 	e.mu.Lock()
 	if !e.running {
@@ -242,7 +200,7 @@ func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParam
 	start := time.Now()
 	maxDepth := params.MaxDepth
 	if maxDepth <= 0 {
-		maxDepth = 6 // безопасный default для demo
+		maxDepth = 10 // default
 	}
 	// iterative deepening
 	var bestPV []base.Move

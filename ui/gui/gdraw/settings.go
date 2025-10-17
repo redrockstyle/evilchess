@@ -3,6 +3,7 @@ package gdraw
 import (
 	"evilchess/ui/gui/gbase"
 	"evilchess/ui/gui/ghelper"
+	"evilchess/ui/gui/ghelper/gdialog"
 	"evilchess/ui/gui/ghelper/glang"
 	"fmt"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
-	"github.com/sqweek/dialog"
 )
 
 type GUISettingsDrawer struct {
@@ -105,13 +105,7 @@ func (sd *GUISettingsDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, err
 
 	// if message box open -> handle clicks on it
 	if sd.msg.Open {
-		if justClicked {
-			// check OK button area in modal coords (we place it centered)
-			// Modal geometry: centered rectangle
-			bounds := text.BoundString(ctx.AssetsWorker.Fonts().Normal, ctx.AssetsWorker.Lang().T("settings.save.success"))
-			sd.msg.CollapseMessageInRect(ctx.Config.WindowW, ctx.Config.WindowH, bounds.Dx(), bounds.Dy())
-		}
-		// animate open/close
+		sd.msg.Update(ctx, mx, my, justReleased)
 		sd.msg.AnimateMessage()
 		return SceneNotChanged, nil
 	}
@@ -137,29 +131,85 @@ func (sd *GUISettingsDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, err
 				// ctx.Config.UCIPath = ""
 			case sd.btnEngineUciIdx:
 				ctx.Config.Engine = "external"
+				// case sd.btnBrowseIdx:
+				// 	// open dialog if UCI used
+				// 	if ctx.Config.Engine == "external" && !sd.browseActive {
+				// 		sd.browseActive = true
+				// 		b.Label = ctx.AssetsWorker.Lang().T("settings.engine.selecting")
+				// 		go func() {
+				// 			var err error
+				// 			ctx.Config.UCIPath, err = dialog.File().Title("Select UCI engine binary").Load()
+				// 			b.Label = ctx.AssetsWorker.Lang().T("settings.engine.no_file")
+				// 			if err != nil {
+				// 				ctx.Logx.Errorf("error dialog: %v", err)
+				// 			}
+				// 			if ctx.Config.UCIPath != "" {
+				// 				if err = IsCorrectEngine(ctx); err != nil {
+				// 					ctx.Config.UCIPath = ""
+				// 					ctx.Logx.Error("selected file is not engine")
+				// 					sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
+				// 				} else {
+				// 					b.Label = filepath.Base(ctx.Config.UCIPath)
+				// 				}
+				// 			}
+				// 			sd.browseActive = false
+				// 		}()
+				// 	}
+				// 	break
 			case sd.btnBrowseIdx:
-				// open dialog if UCI used
 				if ctx.Config.Engine == "external" && !sd.browseActive {
 					sd.browseActive = true
 					b.Label = ctx.AssetsWorker.Lang().T("settings.engine.selecting")
 
 					go func() {
-						var err error
-						ctx.Config.UCIPath, err = dialog.File().Title("Select UCI engine binary").Load()
+						defer func() { sd.browseActive = false }()
+
+						res, err := gdialog.OpenFile("Select UCI engine binary")
 						b.Label = ctx.AssetsWorker.Lang().T("settings.engine.no_file")
+
 						if err != nil {
 							ctx.Logx.Errorf("error dialog: %v", err)
+							return
 						}
-						if ctx.Config.UCIPath != "" {
-							if err = IsCorrectEngine(ctx); err != nil {
+
+						// Desktop: res.Path ненулевой — используем путь как раньше
+						if res.Path != "" {
+							ctx.Config.UCIPath = res.Path
+							// проверяем корректность движка обычным способом
+							if err := IsCorrectEngine(ctx); err != nil {
 								ctx.Config.UCIPath = ""
 								ctx.Logx.Error("selected file is not engine")
 								sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
 							} else {
 								b.Label = filepath.Base(ctx.Config.UCIPath)
 							}
+							return
 						}
-						sd.browseActive = false
+
+						// Browser (WASM): у нас есть res.Data и res.Name
+						// Предупреждение: в браузере нельзя исполнять нативные бинарники.
+						// Варианты: 1) если у вас wasm-версия движка — можно загружать и instantiate;
+						// 2) отправить файл на сервер, где он будет запущен;
+						// 3) сохранить в IndexedDB / FileSystem Access API
+						if len(res.Data) == 0 {
+							ctx.Logx.Error("no file data returned")
+							return
+						}
+
+						// Пример: проверим "магическое" начало файла (простая проверка)
+						// if !IsPlausibleEngineBinary(res.Data) {
+						// 	ctx.Logx.Error("selected file seems not to be an engine")
+						// 	sd.msg.ShowMessage(ctx.AssetsWorker.Lang().T("settings.engine.failed"), nil)
+						// 	return
+						// }
+
+						// Сохраните где нужно: в памяти, в IndexedDB, отправьте на сервер, etc.
+						ctx.Config.UCIPath = "" // нет реального path
+						// ctx.Config.UCIName = res.Name
+						// ctx.Config.UCIData = res.Data // если структура конфигурации позволяет хранить bytes
+						sd.msg.ShowMessage(fmt.Sprintf("Success read %s\nBut: %s", res.Name, ctx.AssetsWorker.Lang().T("message.todo")), nil)
+
+						b.Label = res.Name
 					}()
 				}
 				break
@@ -230,9 +280,10 @@ func (sd *GUISettingsDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Im
 	}
 
 	// if message box open -> draw overlay and modal
-	if sd.msg.Open || sd.msg.Animating {
-		DrawModal(ctx, sd.msg.Scale, sd.msg.Text, screen)
-	}
+	// if sd.msg.Open || sd.msg.Animating {
+	// 	DrawModal(ctx, sd.msg.Scale, sd.msg.Text, screen)
+	// }
+	sd.msg.Draw(ctx, screen)
 
 	// debug TPS
 	if ctx.Config.Debug {
