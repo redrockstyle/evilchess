@@ -1,0 +1,22 @@
+project_name: evilchess
+
+builds:
+  - main: ./main.go
+    binary: evilchess
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: zip
+    files:
+      - LICENSE
+      - README.md
+
+release:
+  github:
+    owner: redrockstyle
+    name: evilchess
