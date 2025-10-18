@@ -113,7 +113,7 @@ func RunEvilChess() error {
 						gb.CreateClassic()
 					}
 
-					clic.EnableANSI()
+					// clic.EnableANSI()
 					cl := clic.NewCLI(gb, clic.PrintMailbox)
 					// if err := cl.RunLineMode(); err != nil {
 					if err := cl.Run(); err != nil {

@@ -3,25 +3,21 @@ package cli
 import (
 	"evilchess/src/base"
 	"fmt"
-	"os"
-	"runtime"
-
-	"golang.org/x/sys/windows"
 )
 
-func EnableANSI() {
-	if runtime.GOOS != "windows" {
-		return
-	}
+// func EnableANSI() {
+// 	if runtime.GOOS != "windows" {
+// 		return
+// 	}
 
-	stdout := windows.Handle(os.Stdout.Fd())
-	var mode uint32
-	if err := windows.GetConsoleMode(stdout, &mode); err != nil {
-		return
-	}
-	mode |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
-	_ = windows.SetConsoleMode(stdout, mode)
-}
+// 	stdout := windows.Handle(os.Stdout.Fd())
+// 	var mode uint32
+// 	if err := windows.GetConsoleMode(stdout, &mode); err != nil {
+// 		return
+// 	}
+// 	mode |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
+// 	_ = windows.SetConsoleMode(stdout, mode)
+// }
 
 func PrintMailbox(m base.Mailbox) {
 	// ANSI-code
