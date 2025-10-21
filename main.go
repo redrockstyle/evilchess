@@ -1,7 +1,7 @@
 package main
 
 import (
-	"evilchess/ui"
+	"evilchess/src/ui"
 	"fmt"
 )
 
