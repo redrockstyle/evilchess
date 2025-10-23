@@ -31,9 +31,9 @@
 <h2 align="center">Internal Engine Overview</h2>
 
 ```mermaid
-flowchart TD
+flowchart LR
   A[Set Position via FEN]:::theme --> B[Start Analysis]:::theme
-  B --> C{Iterative Deepening}:::theme
+  B[Start Analysis]:::theme --> C{Iterative Deepening}:::theme
   C --> D[Depth = 1]:::theme
   D --> E[Generate Root Moves]:::theme
   E --> F[Alpha-Beta Search + TT]:::theme
@@ -47,7 +47,7 @@ flowchart TD
   L -->|Yes| D
   L -->|No| M[Stop Analysis]:::theme
 
-  classDef theme font-size:10px
+  classDef theme font-size:15px
 ```
 ---
 
