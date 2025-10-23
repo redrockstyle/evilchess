@@ -22,7 +22,7 @@
 
 <h2 align="center">GUI Preview</h2>
 <p align="center">
-  <img src="img/demo.gif" alt="demo" width="600">
+  <img src="materials/img/demo.gif" alt="demo" width="600">
 </p>
 
 ---
