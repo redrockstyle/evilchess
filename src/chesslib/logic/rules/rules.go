@@ -129,3 +129,7 @@ func IsDrawPosition(b *base.Board) bool {
 	}
 	return false
 }
+
+func IsCaptureMove(mv base.Move, b *base.Board) bool {
+	return b.Mailbox[base.ConvPointToIndex(mv.To)] != base.EmptyPiece
+}

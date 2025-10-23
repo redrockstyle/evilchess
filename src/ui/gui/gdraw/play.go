@@ -155,7 +155,7 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 	pd.maybeShowStatus(ctx)
 
 	pd.loader = ghelper.NewCircularLoader(
-		ctx.Config.WindowW-60, 60, // x, y
+		ctx.Config.WindowW-50, 50, // x, y
 		30,  // radius
 		8,   // dotSize
 		1.8, // speedRPS
