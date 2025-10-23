@@ -31,23 +31,21 @@
 <h2 align="center">Internal Engine Overview</h2>
 
 ```mermaid
-flowchart LR
-  A[Set Position via FEN]:::theme --> B[Start Analysis]:::theme
-  B[Start Analysis]:::theme --> C{Iterative Deepening}:::theme
-  C --> D[Depth = 1]:::theme
-  D --> E[Generate Root Moves]:::theme
+flowchart TD
+  A[Start Analysis]:::theme
+  A --> B[Depth = 1]:::theme
+  B --> E[Generate Moves]:::theme
   E --> F[Alpha-Beta Search + TT]:::theme
-  F --> G{Quiescence at Leaf?}:::theme
+  F --> G{Quiescence at Leaf}:::theme
   G -->|Yes| H[Capture-Only Search]:::theme
   G -->|No| I[TT Probe/Eval]:::theme
   H --> I
-  I --> J[Update Best PV]:::theme
-  J --> K[Publish Analysis]:::theme
-  K --> L{Depth < Max?}:::theme
-  L -->|Yes| D
+  I --> J[Publish Analysis]:::theme
+  J --> L{Depth < Max}:::theme
+  L -->|Yes| E
   L -->|No| M[Stop Analysis]:::theme
 
-  classDef theme font-size:15px
+  classDef theme font-size:12px
 ```
 ---
 
