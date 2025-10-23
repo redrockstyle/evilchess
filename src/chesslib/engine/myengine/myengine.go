@@ -10,9 +10,15 @@ import (
 	"evilchess/src/chesslib/logic/rules/moves"
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+const (
+	MATE_SCORE     = 1000000
+	MATE_THRESHOLD = 900000
 )
 
 // chess engine implementing deep search
@@ -354,7 +360,7 @@ func (e *EvilEngine) quiesce(b *base.Board, alpha, beta int, ctx context.Context
 // Minimax with alpha-beta + TT + PV extraction support
 // -------------------------------
 // returns score (centipawns) from side-to-move POV
-func (e *EvilEngine) minimax(b *base.Board, depth int, alpha, beta int, ctx context.Context, nodes *int64) int {
+func (e *EvilEngine) minimax(b *base.Board, depth int, alpha, beta int, ctx context.Context, nodes *int64, ply int) int {
 	// cancellation check
 	select {
 	case <-ctx.Done():
@@ -391,11 +397,17 @@ func (e *EvilEngine) minimax(b *base.Board, depth int, alpha, beta int, ctx cont
 	}
 
 	mvs := moves.GenerateLegalMoves(b)
+	// reorder moves: captures first (MVV-LVA-like)
+	sort.SliceStable(mvs, func(i, j int) bool {
+		si := moveOrderScore(b, mvs[i])
+		sj := moveOrderScore(b, mvs[j])
+		return si > sj
+	})
 	if len(mvs) == 0 {
 		// terminal: checkmate or stalemate
 		status := rules.GameStatusOf(b)
 		if status == base.Checkmate {
-			return -1000000 // large negative
+			return -MATE_SCORE + ply
 		}
 		return 0
 	}
@@ -429,7 +441,7 @@ func (e *EvilEngine) minimax(b *base.Board, depth int, alpha, beta int, ctx cont
 		}
 		nb := moves.CloneBoard(b)
 		_ = moves.ApplyMove(nb, mv)
-		score := -e.minimax(nb, depth-1, -beta, -alpha, ctx, nodes)
+		score := -e.minimax(nb, depth-1, -beta, -alpha, ctx, nodes, ply+1)
 		if score > best {
 			best = score
 			bestMove = mv
@@ -615,8 +627,16 @@ func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParam
 			nb := moves.CloneBoard(pos)
 			_ = moves.ApplyMove(nb, mv)
 			nodes := int64(0)
-			score := -e.minimax(nb, depth-1, -1_000_000_000, 1_000_000_000, ctx, &nodes)
+			score := -e.minimax(nb, depth-1, -1_000_000_000, 1_000_000_000, ctx, &nodes, 1)
 			nodesThisDepth += nodes
+			// if score >= MATE_THRESHOLD {
+			// 	// найден мат для side-to-move — можно завершить перебор корневых ходов ранне
+			// 	localBestScore = score
+			// 	localBestPV = []base.Move{mv}
+			// 	// preserve TT entries; break root loop to publish mate now
+			// 	// nodesThisDepth += nodes
+			// 	break
+			// }
 
 			if score > localBestScore {
 				localBestScore = score
@@ -654,9 +674,23 @@ func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParam
 			Nodes:    totalNodes,
 			NPS:      computeNPS(totalNodes, time.Since(start)),
 			ScoreCP:  bestScore,
-			MateIn:   0,
 			PV:       bestPV,
 			BestMove: nilIfEmpty(bestPV),
+			MateIn:   0,
+		}
+		// compute MateIn if score indicates mate
+		absScore := bestScore
+		if absScore < 0 {
+			absScore = -absScore
+		}
+		if absScore >= MATE_THRESHOLD {
+			matePly := MATE_SCORE - absScore
+			if bestScore > 0 {
+				info.MateIn = matePly
+			} else {
+				// optional: represent mate against us as negative
+				info.MateIn = -matePly
+			}
 		}
 		e.publish(info)
 
@@ -670,4 +704,40 @@ func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParam
 	e.mu.Lock()
 	e.running = false
 	e.mu.Unlock()
+}
+
+func pieceValueSimple(p base.Piece) int {
+	switch p {
+	case base.WPawn, base.BPawn:
+		return 100
+	case base.WKnight, base.BKnight:
+		return 320
+	case base.WBishop, base.BBishop:
+		return 330
+	case base.WRook, base.BRook:
+		return 500
+	case base.WQueen, base.BQueen:
+		return 900
+	case base.WKing, base.BKing:
+		return 10000
+	default:
+		return 0
+	}
+}
+
+// score for ordering move: higher -> try earlier
+func moveOrderScore(b *base.Board, mv base.Move) int {
+	// if mv captures, score = captured-value*1000 - attacker-value (so MVV-LVA-ish)
+	toIdx := base.ConvPointToIndex(mv.To)
+	captured := b.Mailbox[toIdx]
+	if captured != base.EmptyPiece {
+		capVal := pieceValueSimple(captured)
+		// attacker value
+		fromIdx := base.ConvPointToIndex(mv.From)
+		attacker := b.Mailbox[fromIdx]
+		attVal := pieceValueSimple(attacker)
+		return capVal*1000 - attVal
+	}
+	// optionally small bonus for promotions if Move contains that info (skip if not)
+	return 0
 }
