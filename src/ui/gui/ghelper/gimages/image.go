@@ -2,7 +2,7 @@ package gimages
 
 import (
 	"evilchess/src/chesslib/base"
-	"evilchess/src/ui/gui/gbase/gos"
+	"evilchess/src/ui/gui/gbase/gassets"
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -10,7 +10,7 @@ import (
 )
 
 func loadIcon(path string) (image.Image, error) {
-	f, err := gos.Open(path)
+	f, err := gassets.OpenAsset(path)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,13 @@ func LoadImageIconAssets(workdir string) (map[int]*ebiten.Image, error) {
 	}
 	icons := make(map[int]*ebiten.Image)
 	for i := 0; i < 4; i++ {
-		img, _, err := ebitenutil.NewImageFromFile(files[i])
+		data, err := gassets.OpenAsset(files[i])
+		if err != nil {
+			return nil, err
+		}
+		defer data.Close()
+		// img, _, err := ebitenutil.NewImageFromFile(files[i])
+		img, _, err := ebitenutil.NewImageFromReader(data)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +111,12 @@ func LoadImagePieceAssets(workdir string) (map[base.Piece]*ebiten.Image, error) 
 	}
 	figureImages := make(map[base.Piece]*ebiten.Image)
 	for i := 0; i < 12; i++ {
-		img, _, err := ebitenutil.NewImageFromFile(files[i])
+		data, err := gassets.OpenAsset(files[i])
+		if err != nil {
+			return nil, err
+		}
+		defer data.Close()
+		img, _, err := ebitenutil.NewImageFromReader(data)
 		if err != nil {
 			return nil, err
 		}

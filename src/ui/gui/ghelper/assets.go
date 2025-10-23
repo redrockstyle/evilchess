@@ -1,11 +1,12 @@
 package ghelper
 
 import (
+	"embed"
 	"evilchess/src/chesslib/base"
+	"evilchess/src/ui/gui/gbase/gconf"
 	"evilchess/src/ui/gui/ghelper/gfont"
 	"evilchess/src/ui/gui/ghelper/gimages"
 	"evilchess/src/ui/gui/ghelper/glang"
-	"evilchess/src/ui/gui/gbase/gconf"
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,6 +18,9 @@ type GUIAssetsWorker struct {
 	iconImages  map[int]*ebiten.Image
 	icons       map[int]image.Image
 	lang        *glang.GUILangWorker
+
+	// preload
+	resource embed.FS
 }
 
 func NewGUIAssetsWorker(rootDirAssets string, cfg *gconf.Config) (*GUIAssetsWorker, error) {

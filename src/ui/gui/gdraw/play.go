@@ -56,6 +56,9 @@ type GUIPlayDrawer struct {
 	engineMu       sync.Mutex
 	engineDoneCh   chan struct{}
 
+	// load anim
+	loader *ghelper.CircularLoader
+
 	// buttons
 	msg           *ghelper.MessageBox
 	buttons       []*ghelper.Button
@@ -150,6 +153,15 @@ func NewGUIPlayDrawer(ctx *ghelper.GUIGameContext) *GUIPlayDrawer {
 	pd.msg = &ghelper.MessageBox{}
 	pd.status = ctx.Builder.Status()
 	pd.maybeShowStatus(ctx)
+
+	pd.loader = ghelper.NewCircularLoader(
+		ctx.Config.WindowW-60, 60, // x, y
+		30,  // radius
+		8,   // dotSize
+		1.8, // speedRPS
+		10,  // segments
+		ctx,
+	)
 	return pd
 }
 
@@ -177,12 +189,15 @@ func (pd *GUIPlayDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, error) 
 	select {
 	case <-pd.engineDoneCh:
 		pd.engineThinking = false
+		pd.loader.Active = false
 	default:
 	}
 
 	now := time.Now()
 	dt := now.Sub(pd.lastTick).Seconds()
 	pd.lastTick = now
+
+	pd.loader.Update(dt)
 
 	// clocks update
 	if ctx.Config.UseClock && !pd.allblock && pd.started {
@@ -555,6 +570,7 @@ func (pd *GUIPlayDrawer) startEngineMoveAsync(ctx *ghelper.GUIGameContext) {
 		return
 	}
 	pd.engineThinking = true
+	pd.loader.Active = true
 	pd.engineMu.Unlock()
 
 	// run engine
@@ -571,6 +587,8 @@ func (pd *GUIPlayDrawer) startEngineMoveAsync(ctx *ghelper.GUIGameContext) {
 func (pd *GUIPlayDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image) {
 	// background
 	screen.Fill(ctx.Theme.Bg)
+
+	pd.loader.Draw(screen)
 
 	// draw board background (border)
 	if pd.borderImg != nil {
@@ -650,7 +668,7 @@ func (pd *GUIPlayDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 			}
 		}
 	}
-	text.Draw(screen, engineName, ctx.AssetsWorker.Fonts().Pixel, pd.boardX+8, pd.boardY-8, ctx.Theme.MenuText)
+	text.Draw(screen, engineName, ctx.AssetsWorker.Fonts().Pixel, pd.boardX+24, pd.boardY-8, ctx.Theme.MenuText)
 
 	// -------------------- clocks --------------------
 	if ctx.Config.UseClock {
@@ -704,10 +722,10 @@ func (pd *GUIPlayDrawer) prepareCache(ctx *ghelper.GUIGameContext) {
 
 	// square images
 	pd.sqLightImg = ebiten.NewImage(pd.sqSize, pd.sqSize)
-	pd.sqLightImg.Fill(ctx.Theme.ButtonFill)
+	pd.sqLightImg.Fill(ctx.Theme.SquareLight)
 
 	pd.sqDarkImg = ebiten.NewImage(pd.sqSize, pd.sqSize)
-	pd.sqDarkImg.Fill(ctx.Theme.Bg)
+	pd.sqDarkImg.Fill(ctx.Theme.SquareDark)
 
 	// border around board
 	pd.borderImg = ghelper.RenderRoundedRect(pd.boardSize+8, pd.boardSize+8, 6, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)

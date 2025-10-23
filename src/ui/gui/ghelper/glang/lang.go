@@ -3,8 +3,8 @@ package glang
 import (
 	"encoding/json"
 	"errors"
+	"evilchess/src/ui/gui/gbase/gassets"
 	"evilchess/src/ui/gui/gbase/gconf"
-	"evilchess/src/ui/gui/gbase/gos"
 	"fmt"
 )
 
@@ -66,7 +66,7 @@ func (lw *GUILangWorker) GetLang() LangType {
 
 func (lw *GUILangWorker) SetLang(l LangType) error {
 	lw.lang = l
-	data, err := gos.ReadFile(lw.workdir + "/" + lw.langTypeToJsonName())
+	data, err := gassets.ReadAsset(lw.workdir + "/" + lw.langTypeToJsonName())
 	if err != nil {
 		return err
 	}

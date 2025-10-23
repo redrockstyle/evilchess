@@ -500,9 +500,9 @@ func (ed *GUIEditDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image)
 
 func (ed *GUIEditDrawer) prepareCache(ctx *ghelper.GUIGameContext) {
 	ed.sqLightImg = ebiten.NewImage(ed.sqSize, ed.sqSize)
-	ed.sqLightImg.Fill(ctx.Theme.ButtonFill)
+	ed.sqLightImg.Fill(ctx.Theme.SquareLight)
 	ed.sqDarkImg = ebiten.NewImage(ed.sqSize, ed.sqSize)
-	ed.sqDarkImg.Fill(ctx.Theme.Bg)
+	ed.sqDarkImg.Fill(ctx.Theme.SquareDark)
 	ed.borderImg = ghelper.RenderRoundedRect(ed.boardSize+8, ed.boardSize+8, 6, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 
 	ed.scaledPieces = make(map[base.Piece]*ebiten.Image)

@@ -3,8 +3,11 @@ package ghelper
 import (
 	"evilchess/src/ui/gui/gbase"
 	"fmt"
+	"image"
 	"image/color"
+	"image/draw"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -117,7 +120,6 @@ func (b *Button) DrawAnimated(screen *ebiten.Image, face font.Face, theme gbase.
 }
 
 // ---- MessageBox ----
-// MessageBox с choices и корректной геометрией (Scale-aware)
 type MessageChoice struct {
 	Label string
 	Image *ebiten.Image
@@ -447,6 +449,156 @@ func (mb *MessageBox) CollapseMessageInRect(mx, my int) {
 	okY := r.Y + r.H - okH - 20
 	if PointInRect(mx, my, okX, okY, okW, okH) {
 		mb.CollapseMessage()
+	}
+}
+
+// --- Circular Loader ---
+
+// - x, y: центр в пикселях
+// - radius: радиус окружности, по которой бегают точки
+// - dotSize: базовый диаметр точки (в пикселях)
+// - speedRPS: обороты в секунду; положительное -> по часовой стрелке, отрицательное -> обратное
+// - segments: количество точек/сегментов
+// - colors: слайс color.RGBA (nil или пустой -> используется дефолтная палитра)
+type CircularLoader struct {
+	X, Y     int
+	Radius   float64
+	DotSize  float64
+	SpeedRPS float64
+	Segments int
+	Colors   []color.RGBA
+
+	Active bool
+
+	phase float64
+	bg    color.Color
+	lastT time.Time
+
+	dotImg *ebiten.Image
+}
+
+func NewCircularLoader(x, y int, radius, dotSize, speedRPS float64, segments int, ctx *GUIGameContext) *CircularLoader {
+	if dotSize <= 0 {
+		dotSize = math.Max(6, radius*0.12)
+	}
+	if segments <= 0 {
+		segments = 6
+	}
+
+	c := &CircularLoader{
+		X:        x,
+		Y:        y,
+		Radius:   radius,
+		DotSize:  dotSize,
+		SpeedRPS: speedRPS,
+		Segments: segments,
+		Colors: []color.RGBA{
+			ctx.Theme.ButtonStroke,
+			// {R: 120, G: 200, B: 255, A: 255},
+			// {R: 100, G: 180, B: 230, A: 255},
+			// {R: 80, G: 150, B: 210, A: 255},
+		},
+		Active: false,
+		phase:  0,
+	}
+	c.makeDotImage()
+	return c
+}
+
+func (c *CircularLoader) makeDotImage() {
+	size := int(math.Ceil(c.DotSize))
+	if size < 1 {
+		size = 1
+	}
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{0, 0, 0, 0}}, image.Point{}, draw.Src)
+
+	cx := float64(size-1) / 2.0
+	cy := cx
+	r := c.DotSize / 2.0
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			dx := float64(x) - cx
+			dy := float64(y) - cy
+			if dx*dx+dy*dy <= r*r {
+				// soft edge ~1px
+				dist := math.Sqrt(dx*dx + dy*dy)
+				var a uint8 = 255
+				if dist > r-1.0 {
+					alpha := 1.0 - (dist - (r - 1.0))
+					if alpha < 0 {
+						alpha = 0
+					}
+					a = uint8(255 * alpha)
+				}
+				img.Set(x, y, color.RGBA{R: 255, G: 255, B: 255, A: a})
+			}
+		}
+	}
+	c.dotImg = ebiten.NewImageFromImage(img)
+}
+
+func (c *CircularLoader) Update(dt float64) {
+	if !c.Active {
+		return
+	}
+	// dφ = -2π * speed * dt
+	angular := -2 * math.Pi * c.SpeedRPS
+	c.phase += dt * angular
+	// normalize 0..2π
+	c.phase = math.Mod(c.phase, 2*math.Pi)
+	if c.phase < 0 {
+		c.phase += 2 * math.Pi
+	}
+}
+
+func (c *CircularLoader) Draw(screen *ebiten.Image) {
+	if !c.Active {
+		return
+	}
+	if c.Segments <= 0 {
+		c.Segments = 1
+	}
+	if c.dotImg == nil {
+		c.makeDotImage()
+	}
+
+	segAngle := 2 * math.Pi / float64(c.Segments)
+
+	for i := c.Segments - 1; i >= 0; i-- {
+		n := float64(i)
+		angle := c.phase + n*segAngle
+		x := float64(c.X) + math.Cos(angle)*c.Radius
+		y := float64(c.Y) + math.Sin(angle)*c.Radius
+
+		t := n / float64(c.Segments)    // 0..1 (head ~0, tail ~1)
+		headFactor := 1.0 - t           // headFactor 1..0
+		scale := 0.6 + 0.9*headFactor   // 0.6..1.5
+		alpha := 0.25 + 0.75*headFactor // 0.25..1.0
+
+		col := c.Colors[i%len(c.Colors)]
+		cr := float64(col.R) / 255.0
+		cg := float64(col.G) / 255.0
+		cb := float64(col.B) / 255.0
+		colA := (float64(col.A) / 255.0) * alpha
+
+		sw, sh := c.dotImg.Size()
+		if sw == 0 || sh == 0 {
+			continue
+		}
+		target := c.DotSize * scale
+		sx := target / float64(sw)
+		sy := target / float64(sh)
+
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Scale(sx, sy)
+		op.GeoM.Translate(x-float64(sw)*sx/2.0, y-float64(sh)*sy/2.0)
+
+		var cm ebiten.ColorM
+		cm.Scale(float64(cr), float64(cg), float64(cb), float64(colA))
+		op.ColorM = cm
+
+		screen.DrawImage(c.dotImg, op)
 	}
 }
 

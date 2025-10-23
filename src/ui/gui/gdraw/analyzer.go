@@ -87,6 +87,9 @@ type GUIAnalyzeDrawer struct {
 
 	prevMouseDown bool
 	lastTick      time.Time
+
+	// load anim
+	loader *ghelper.CircularLoader
 }
 
 func NewGUIAnalyzeDrawer(ctx *ghelper.GUIGameContext) *GUIAnalyzeDrawer {
@@ -136,6 +139,15 @@ func NewGUIAnalyzeDrawer(ctx *ghelper.GUIGameContext) *GUIAnalyzeDrawer {
 	ad.listOffset = 100
 	ad.listY = ad.listOffset + 28*5 + 12 // same spacing as in Draw
 
+	ad.loader = ghelper.NewCircularLoader(
+		ctx.Config.WindowW-60, 60, // x, y
+		30,  // radius
+		8,   // dotSize
+		1.8, // speedRPS
+		10,  // segments
+		ctx,
+	)
+
 	return ad
 }
 
@@ -151,9 +163,9 @@ func (ad *GUIAnalyzeDrawer) recalcLayout(ctx *ghelper.GUIGameContext) {
 
 func (ad *GUIAnalyzeDrawer) prepareCache(ctx *ghelper.GUIGameContext) {
 	ad.sqLightImg = ebiten.NewImage(ad.sqSize, ad.sqSize)
-	ad.sqLightImg.Fill(ctx.Theme.ButtonFill)
+	ad.sqLightImg.Fill(ctx.Theme.SquareLight)
 	ad.sqDarkImg = ebiten.NewImage(ad.sqSize, ad.sqSize)
-	ad.sqDarkImg.Fill(ctx.Theme.Bg)
+	ad.sqDarkImg.Fill(ctx.Theme.SquareDark)
 	ad.borderImg = ghelper.RenderRoundedRect(ad.boardSize+8, ad.boardSize+8, 6, ctx.Theme.ButtonFill, ctx.Theme.ButtonStroke, 3)
 
 	keys := []base.Piece{
@@ -232,6 +244,7 @@ func (ad *GUIAnalyzeDrawer) StartAnalysis(ctx *ghelper.GUIGameContext, level eng
 	ad.infoCh = ch
 	ad.unsub = unsub
 	ad.running = true
+	ad.loader.Active = true
 	ad.paused = false
 
 	// reader goroutine
@@ -319,6 +332,7 @@ func (ad *GUIAnalyzeDrawer) StopAnalysis(ctx *ghelper.GUIGameContext) {
 	}
 	ad.running = false
 	ad.paused = false
+	ad.loader.Active = false
 }
 
 // helper: perform move (handles promotion UI)
@@ -358,6 +372,8 @@ func (ad *GUIAnalyzeDrawer) Update(ctx *ghelper.GUIGameContext) (SceneType, erro
 	justPressed := mouseDown && !ad.prevMouseDown
 	justReleased := !mouseDown && ad.prevMouseDown
 	ad.prevMouseDown = mouseDown
+
+	ad.loader.Update(dt)
 
 	// message box
 	ad.msg.Update(ctx, mx, my, justReleased)
@@ -587,6 +603,8 @@ func (ad *GUIAnalyzeDrawer) performMoveWithPromotionCheck(ctx *ghelper.GUIGameCo
 func (ad *GUIAnalyzeDrawer) Draw(ctx *ghelper.GUIGameContext, screen *ebiten.Image) {
 	// background
 	screen.Fill(ctx.Theme.Bg)
+
+	ad.loader.Draw(screen)
 
 	// board border
 	if ad.borderImg != nil {
