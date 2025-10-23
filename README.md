@@ -7,6 +7,7 @@
 * R/W FEN (Forsyth–Edwards Notation)
 * R/W PGN (Portable Game Notation)
 * R/W SAN (Standard Algebraic Notation)
+* Internal Engine (Iterative Deep Search)
 * Engine support via UCI protocol
 * Color GUI (Ebiten Library):
 * * Play Scene
@@ -25,6 +26,29 @@
   <img src="materials/img/demo.gif" alt="demo" width="600">
 </p>
 
+---
+
+<h2 align="center">Internal Engine Overview</h2>
+
+```mermaid
+flowchart TD
+  A[Set Position via FEN]:::theme --> B[Start Analysis]:::theme
+  B --> C{Iterative Deepening}:::theme
+  C --> D[Depth = 1]:::theme
+  D --> E[Generate Root Moves]:::theme
+  E --> F[Alpha-Beta Search + TT]:::theme
+  F --> G{Quiescence at Leaf?}:::theme
+  G -->|Yes| H[Capture-Only Search]:::theme
+  G -->|No| I[TT Probe/Eval]:::theme
+  H --> I
+  I --> J[Update Best PV]:::theme
+  J --> K[Publish Analysis]:::theme
+  K --> L{Depth < Max?}:::theme
+  L -->|Yes| D
+  L -->|No| M[Stop Analysis]:::theme
+
+  classDef theme font-size:10px
+```
 ---
 
 ## References
