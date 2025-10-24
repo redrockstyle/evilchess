@@ -365,7 +365,7 @@ def process_file(args):
 # -------------------------- CLI --------------------------
 
 def parse_args():
-    p = argparse.ArgumentParser(description='Filter large Lichess PGN dumps (streaming)')
+    p = argparse.ArgumentParser(description='Filter large PGN dumps (streaming)')
     p.add_argument('-i', '--input', required=True, help='Input PGN file (can be .gz)')
     p.add_argument('-o', '--output', required=True, help='Output PGN file (will be appended)')
 
@@ -403,7 +403,7 @@ def parse_args():
     p.add_argument('--max-increment', type=int, default=31,
                    help='Maximum increment seconds allowed per move (games with increment >= this value are skipped). Default 31 (so increments >=31 are skipped)')
 
-    p.add_argument('--status', type=int, default=100000, help='Status print interval (games). Default 100k')
+    p.add_argument('--status', type=int, default=100000, help='Status print interval (default 100k)')
 
     p.add_argument('--dedup-db', default=None, help='Path to sqlite DB for deduplication (optional). Example: out.dedup.db')
 
@@ -413,7 +413,7 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
 
-    print('Starting PGN filtering (fixed parser)')
+    print('Starting PGN filtering')
     print(f'Input: {args.input} -> Output: {args.output}')
 
     process_file(args)
