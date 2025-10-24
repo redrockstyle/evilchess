@@ -14,7 +14,7 @@
 * * Editor Scene
 * * Analyzer Scene
 * * Settings Scene
-* WASM Test-Build (it's work LOL)
+* WASM Test-Build (it works LOL)
 
 ## Functionallity (in the future)
 * My AI Engine (experimental)

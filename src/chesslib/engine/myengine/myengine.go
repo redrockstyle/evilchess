@@ -523,7 +523,7 @@ func (e *EvilEngine) searchWorker(ctx context.Context, params engine.SearchParam
 	start := time.Now()
 	maxDepth := params.MaxDepth
 	if maxDepth <= 0 {
-		maxDepth = 6 // default
+		maxDepth = 10 // default
 	}
 	// iterative deepening
 	var bestPV []base.Move

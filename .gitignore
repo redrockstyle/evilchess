@@ -43,4 +43,9 @@ materials/engine/stockfish
 evilchess.log
 evilchess.json
 
+# Other
 ui/gui/guitest
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
