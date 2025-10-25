@@ -20,6 +20,7 @@ Examples:
 import argparse
 import chess.pgn
 import csv
+import time
 import re
 from pathlib import Path
 from typing import List, Optional
@@ -69,9 +70,12 @@ def column_flags_from_args(args) -> List[str]:
             cols.remove(col)
     return cols
 
+def get_elapsed(offset):
+    return time.time() - offset
 
 def iter_games_positions(pgn_path: Path, progress_interval):
     """Generator yielding per-move data dict for each move in each game."""
+    last_status_time = time.time()
     with pgn_path.open("r", encoding="utf-8", errors="replace") as f:
         game_index = 0
         fen_index = 0
@@ -81,7 +85,7 @@ def iter_games_positions(pgn_path: Path, progress_interval):
                 break
             game_index += 1
             if game_index % progress_interval == 0:
-                print(f"Processed {game_index} games...")
+                print(f"Processed {game_index} games and {fen_index} FEN's, elapsed={get_elapsed(last_status_time):.1f}s")
             headers = game.headers
             result_str = headers.get("Result", "*")
             result = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(result_str, None)
@@ -110,14 +114,14 @@ def iter_games_positions(pgn_path: Path, progress_interval):
                 board.push(move)
                 halfmove += 1
             fen_index += halfmove
-    print(f"Processed {game_index} games and {fen_index} FEN's")
+    print(f"Processed {game_index} games and {fen_index} FEN's, elapsed={get_elapsed(last_status_time):.1f}s")
 
 
 def main():
-    p = argparse.ArgumentParser(description="Extract positions from PGN into CSV (configurable columns)")
+    p = argparse.ArgumentParser(description="Extract FEN-positions from PGN into CSV with configurable columns")
     p.add_argument("pgn", type=Path, help="Input PGN file")
     p.add_argument("-o", "--out", type=Path, default=Path("positions.csv"), help="Output CSV file")
-    p.add_argument('--status', type=int, default=1000, help='Status print interval (default 1000')
+    p.add_argument('--status', type=int, default=1000, help='Status print interval (default 1000)')
     p.add_argument("--exclude", type=str, default="", help="Comma-separated column names to exclude (e.g. --exclude move,side)")
 
     # Add explicit --no- flags for each default column
