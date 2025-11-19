@@ -186,7 +186,7 @@ def train_one_epoch(model, loader, opt, scaler, loss_fn_policy, alpha_value, dev
         r = r.to(device)
 
         opt.zero_grad()
-        with torch.cuda.amp.autocast(enabled=(device.type=='cuda')):
+        with torch.amp.autocast('cuda'):
             logits, value_pred = model(x, scalar_feats=r)
             policy_loss = loss_fn_policy(logits, y)
             value_loss = F.mse_loss(value_pred, v)

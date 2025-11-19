@@ -30,8 +30,8 @@ def prepare_data(args):
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=mms.collate_fn)
         test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=mms.collate_fn)
     else:
-        train_ds = mms.ChessDataset(train_df, move2idx, max_samples=args.max_samples)
-        test_ds = mms.ChessDataset(test_df, move2idx, max_samples=args.max_samples and int(args.max_samples*0.1))
+        train_ds = mmn.ChessDataset(train_df, move2idx, max_samples=args.max_samples)
+        test_ds = mmn.ChessDataset(test_df, move2idx, max_samples=args.max_samples and int(args.max_samples*0.1))
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=mmn.collate_fn)
         test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=mmn.collate_fn)
     return train_loader, test_loader, num_moves, move2idx, idx2move
@@ -126,7 +126,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=8)
     parser.add_argument('--lr', type=float, default=4e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--max_samples', type=int, default=0)
     parser.add_argument('--test_size', type=float, default=0.05)
     parser.add_argument('--no_transformer', action='store_true', help='Disable transformer block')
