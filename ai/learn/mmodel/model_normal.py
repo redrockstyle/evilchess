@@ -6,7 +6,7 @@
 """
 
 
-from typing import Dict, Optional
+from typing import Dict, Tuple, Optional
 import pandas as pd
 import os
 import json
@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from mtools import mtools
+from mmodel import model_abc
 
 # --------------------------- Dataset ---------------------------
 class ChessDataset(Dataset):
@@ -163,116 +164,128 @@ class ImprovedChessNet(nn.Module):
         return policy_logits, value.squeeze(1)
 
 
-# --------------------------- Training / Eval ---------------------------
-def build_move_vocab(moves):
-    uniq = sorted(list(set(moves)))
-    move2idx = {m:i for i,m in enumerate(uniq)}
-    idx2move = {i:m for m,i in move2idx.items()}
-    return move2idx, idx2move
+# --------------------------- Trainer ---------------------------
+class NormalModelTrainer(model_abc.ChessModelTrainer):
+    def __init__(self, num_moves: int, use_transformer: bool, \
+                 lr, weight_decay, scaler, alpha_value: float, device: torch.device):
+        self.device = device
+        self.scaler = scaler
+        self.lr = lr
+        self.alpha_value = alpha_value
+        self.model = ImprovedChessNet(num_moves, use_transformer, scalar_feat_dim=1).to(device)
+        self.opt = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        self.loss = nn.CrossEntropyLoss(label_smoothing=0.02)
+        return
 
+    def init_scheduler(self, steps_per_epoch, epochs):
+        # OneCycleLR requires total_steps or steps_per_epoch; we'll compute steps_per_epoch
+        total_steps = steps_per_epoch * epochs
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=self.lr, total_steps=total_steps)
 
-def train_one_epoch(model, loader, opt, scaler, loss_fn_policy, alpha_value, device, scheduler=None):
-    model.train()
-    running_loss = 0.0
-    running_policy_loss = 0.0
-    running_value_loss = 0.0
-    correct = 0
-    total = 0
+    def train_one_epoch(self, dataset) -> Tuple[float, float, float, float]:
+        self.model.train()
+        running_loss = 0.0
+        running_policy_loss = 0.0
+        running_value_loss = 0.0
+        correct = 0
+        total = 0
+        for x,y,v,r in tqdm(dataset, desc='train', leave=False):
+            x = x.to(self.device)
+            y = y.to(self.device)
+            v = v.to(self.device)
+            r = r.to(self.device)
 
-    for x,y,v,r in tqdm(loader, desc='train', leave=False):
-        x = x.to(device)
-        y = y.to(device)
-        v = v.to(device)
-        r = r.to(device)
-
-        opt.zero_grad()
-        with torch.amp.autocast('cuda'):
-            logits, value_pred = model(x, scalar_feats=r)
-            policy_loss = loss_fn_policy(logits, y)
-            value_loss = F.mse_loss(value_pred, v)
-            loss = policy_loss + alpha_value * value_loss
-        scaler.scale(loss).backward()
-        scaler.unscale_(opt)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        scaler.step(opt)
-        scaler.update()
-        if scheduler is not None:
-            try:
-                scheduler.step()
-            except Exception:
-                pass
-
-        running_loss += float(loss.item()) * x.size(0)
-        running_policy_loss += float(policy_loss.item()) * x.size(0)
-        running_value_loss += float(value_loss.item()) * x.size(0)
-        preds = logits.argmax(dim=1)
-        correct += (preds == y).sum().item()
-        total += x.size(0)
-
-    return running_loss/total, running_policy_loss/total, running_value_loss/total, correct/total
-
-
-def eval_model(model, loader, loss_fn_policy, alpha_value, device):
-    model.eval()
-    running_loss = 0.0
-    running_policy_loss = 0.0
-    running_value_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for x,y,v,r in tqdm(loader, desc='eval', leave=False):
-            x = x.to(device)
-            y = y.to(device)
-            v = v.to(device)
-            r = r.to(device)
-            logits, value_pred = model(x, scalar_feats=r)
-            policy_loss = loss_fn_policy(logits, y)
-            value_loss = F.mse_loss(value_pred, v)
-            loss = policy_loss + alpha_value * value_loss
+            self.opt.zero_grad()
+            with torch.amp.autocast('cuda'):
+                logits, value_pred = self.model(x, scalar_feats=r)
+                policy_loss = self.loss_fn_policy(logits, y)
+                value_loss = F.mse_loss(value_pred, v)
+                loss = policy_loss + self.alpha_value * value_loss
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.opt)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            self.scaler.step(self.opt)
+            self.scaler.update()
+            if self.scheduler is not None:
+                try:
+                    self.scheduler.step()
+                except Exception as e:
+                    print(f'warn: exception scheduler: {e}')
             running_loss += float(loss.item()) * x.size(0)
             running_policy_loss += float(policy_loss.item()) * x.size(0)
             running_value_loss += float(value_loss.item()) * x.size(0)
             preds = logits.argmax(dim=1)
             correct += (preds == y).sum().item()
             total += x.size(0)
-    return running_loss/total, running_policy_loss/total, running_value_loss/total, correct/total
+        return running_loss/total, running_policy_loss/total, running_value_loss/total, correct/total
 
-def load_trained(model_dir: str, device: torch.device, use_transformer: bool=True):
-    with open(os.path.join(model_dir, 'move2idx.json'), 'r') as f:
-        move2idx = json.load(f)
-    idx2move = {int(idx): move for move, idx in move2idx.items()}
-    num_moves = len(move2idx)
-    model = ImprovedChessNet(num_moves, use_transformer=use_transformer, scalar_feat_dim=1).to(device)
-    model.load_state_dict(torch.load(os.path.join(model_dir, 'best_model.pth'), map_location=device))
-    model.eval()
-    return model, move2idx, idx2move
+    def eval_model(self, dataset) -> Tuple[float, float, float, float]:
+        self.model.eval()
+        running_loss = 0.0
+        running_policy_loss = 0.0
+        running_value_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for x,y,v,r in tqdm(dataset, desc='eval', leave=False):
+                x = x.to(self.device)
+                y = y.to(self.device)
+                v = v.to(self.device)
+                r = r.to(self.device)
+                logits, value_pred = self.model(x, scalar_feats=r)
+                policy_loss = self.loss_fn_policy(logits, y)
+                value_loss = F.mse_loss(value_pred, v)
+                loss = policy_loss + self.alpha_value * value_loss
+                running_loss += float(loss.item()) * x.size(0)
+                running_policy_loss += float(policy_loss.item()) * x.size(0)
+                running_value_loss += float(value_loss.item()) * x.size(0)
+                preds = logits.argmax(dim=1)
+                correct += (preds == y).sum().item()
+                total += x.size(0)
+        return running_loss/total, running_policy_loss/total, running_value_loss/total, correct/total
 
-def predict_move(fen: str, model, move2idx: Dict[str,int], idx2move: Dict[int,str], topk:int=5, legal_only:bool=True, device:torch.device=None):
-    if device is None:
-        device = next(model.parameters()).device
-    x = mtools.fen_to_tensor(fen)
-    x_t = torch.tensor(x, dtype=torch.float32).unsqueeze(0).to(device)
-    r = torch.tensor([[2000.0/3000.0]], dtype=torch.float32).to(device)
-    with torch.no_grad():
-        logits, _ = model(x_t, scalar_feats=r)
-        probs = torch.softmax(logits, dim=-1).cpu().numpy().reshape(-1)
-    sorted_idx = np.argsort(-probs)
-    board = chess.Board(fen)
-    legal_set = set(m.uci() for m in board.legal_moves)
-    results = []
-    for idx in sorted_idx:
-        move = idx2move.get(int(idx), None)
-        if move is None:
-            continue
-        p = float(probs[idx])
-        if legal_only:
-            if move in legal_set:
+    def save(self, move2idx, out_dir) -> bool:
+        mtools.save_model_pth(self.model, move2idx, out_dir)
+
+    def save_all(self, move2idx, out_dir) -> bool:
+        mtools.save_model_pt(self.model, move2idx, out_dir)
+
+    def load(self, path) -> nn.Module:
+        with open(os.path.join(path, 'move2idx.json'), 'r') as f:
+            move2idx = json.load(f)
+        idx2move = {int(idx): move for move, idx in move2idx.items()}
+        num_moves = len(move2idx)
+        self.model = ImprovedChessNet(num_moves, use_transformer=self.use_transformer, scalar_feat_dim=1).to(self.device)
+        self.model.load_state_dict(torch.load(os.path.join(path, 'best_model.pth'), map_location=self.device))
+        self.model.eval()
+        return move2idx, idx2move
+
+    def predict(self, fen: str, idx2move: Dict[int,str], topk:int=5, legal_only:bool=True) -> Dict[int]:
+        if self.device is None:
+            self.device = next(self.model.parameters()).device
+        x = mtools.fen_to_tensor(fen)
+        x_t = torch.tensor(x, dtype=torch.float32).unsqueeze(0).to(self.device)
+        r = torch.tensor([[2000.0/3000.0]], dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            logits, _ = self.model(x_t, scalar_feats=r)
+            probs = torch.softmax(logits, dim=-1).cpu().numpy().reshape(-1)
+        sorted_idx = np.argsort(-probs)
+        board = chess.Board(fen)
+        legal_set = set(m.uci() for m in board.legal_moves)
+        results = []
+        for idx in sorted_idx:
+            move = idx2move.get(int(idx), None)
+            if move is None:
+                continue
+            p = float(probs[idx])
+            if legal_only:
+                if move in legal_set:
+                    results.append((move,p))
+            else:
                 results.append((move,p))
-        else:
-            results.append((move,p))
-        if len(results) >= topk:
-            break
-    if len(results) == 0 and legal_only:
-        for idx in sorted_idx[:topk]:
-            results.append((idx2move.get(int(idx),'?'), float(probs[idx])))
-    return results
+            if len(results) >= topk:
+                break
+        if len(results) == 0 and legal_only:
+            for idx in sorted_idx[:topk]:
+                results.append((idx2move.get(int(idx),'?'), float(probs[idx])))
+        return results

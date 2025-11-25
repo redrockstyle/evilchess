@@ -1,149 +1,276 @@
 """
- - Самая простая модель SmallConvNet для тестовых обучений
+ - Небольшая модель для тестовых обучений
 """
 
-import torch
 import os
-import json
-import numpy as np
+import torch
 import chess
 import torch.nn as nn
-import pandas as pd
 from tqdm import tqdm
 from mtools import mtools
-from torch.utils.data import Dataset
-from typing import Dict
-
-# ---------------------- Dataset ----------------------
-class ChessDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, move2idx: Dict[str,int], max_samples=0):
-        self.df = df.reset_index(drop=True)
-        if max_samples != 0 and max_samples < len(self.df):
-            self.df = self.df.sample(n=min(max_samples,len(self.df)), random_state=42).reset_index(drop=True)
-        self.move2idx = move2idx
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        row = self.df.iloc[idx]
-        fen = row['fen']
-        move = row['move']
-        x = mtools.fen_to_tensor(fen)  # (13,8,8)
-        # target
-        y = self.move2idx.get(move, -1)
-        if y == -1:
-            # если ход оказался незнаком — заменяем на 0 (или можно пропустить до подготовки данных)
-            y = 0
-        return torch.tensor(x), torch.tensor(y, dtype=torch.long)
-
-def collate_fn(batch):
-    xs = torch.stack([item[0] for item in batch])
-    ys = torch.stack([item[1] for item in batch])
-    return xs, ys
+from mmodel import model_abc
+from typing import List, Tuple
 
 
 class SmallConvNet(nn.Module):
-    def __init__(self, num_moves:int):
+    def __init__(self):
         super().__init__()
-        self.net = nn.Sequential(
+        
+        # 1. Feature Extractor (CNN)
+        # можно увеличить для произоводительность kernel_size в первом слое до 5 или 7
+        self.conv_block = nn.Sequential(
             nn.Conv2d(13, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
-            nn.ReLU(),
+            nn.ReLU(inplace=True), # inplace=True экономит память
+            
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
+            
             nn.Conv2d(128, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1,1)),
-            nn.Flatten(),
-            nn.Linear(128, 512),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(512, num_moves)
+            nn.ReLU(inplace=True),
+            
+            # можно попробовать эти три слоя исключить
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+        
+        # Global Average Pooling ?? Flatten ??
+        self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
+        self.flatten = nn.Flatten()
+
+        # 2. Common Dense Layer
+        # на вход 128 каналов от CNN + 1 число рейтинга
+        self.fc_common = nn.Sequential(
+            nn.Linear(128 + 1, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3)
         )
 
-    def forward(self, x):
-        return self.net(x)
+        # 3. Policy Heads
+        # Head From Square: 64 клетки
+        self.from_head = nn.Linear(512, 64)
+        # Haed To Square: 64 клетки
+        self.to_head = nn.Linear(512, 64)
+        # Value Head: 1 число (победа/поражение)
+        # вывод 1 число: Tanh дает от -1 (Black wins) до 1 (White wins).
+        self.value_head = nn.Sequential(
+            nn.Linear(512, 64),
+            nn.ReLU(inplace=True),
+            nn.Linear(64, 1) # активация будет в лоссе (BCEWithLogits)
+        )
+
+    def forward(self, x_board: torch.Tensor, x_rating: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # x_board: (B, 13, 8, 8)
+        # x_rating: (B, 1)
+
+        # CNN
+        feat = self.conv_block(x_board)
+        feat = self.avg_pool(feat)
+        feat = self.flatten(feat) # (Batch, 128)
+
+        # conact rating and board
+        combined = torch.cat([feat, x_rating], dim=1) # (Batch, 129)
+
+        # полносвязный слой
+        common = self.fc_common(combined)
+
+        # heads
+        out_from = self.from_head(common) # (Batch, 64)
+        out_to = self.to_head(common)     # (Batch, 64)
+        out_val = self.value_head(common) # (Batch, 1)
+
+        return out_from, out_to, out_val
     
 
-# ---------------------- Training ----------------------
-def train_one_epoch(model, loader, opt, loss_fn, device):
-    model.train()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    for x,y in tqdm(loader, desc='train', leave=False):
-        x = x.to(device)
-        y = y.to(device)
-        opt.zero_grad()
-        logits = model(x)
-        loss = loss_fn(logits, y)
-        loss.backward()
-        opt.step()
-        running_loss += float(loss.item()) * x.size(0)
-        preds = logits.argmax(dim=1)
-        correct += (preds == y).sum().item()
-        total += x.size(0)
-    return running_loss / total, correct/total
+class SmallModelTrainer(model_abc.ChessModelTrainer):
+    def __init__(self, lr: float = 0.0, weight_decay: float = 0.0, device: torch.device = None, model: nn.Module = None):
+        self.device = device
+        if model is not None:
+            self.model = model
+            return
+        self.model = SmallConvNet().to(device)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        
+        self.loss_ce = nn.CrossEntropyLoss()        # Для From и To
 
+        # self.loss_mse = nn.BCEWithLogitsLoss()    # Для Value (можно попробовать вместо MSELoss)
+        self.loss_mse = nn.MSELoss()                # Для Value
+        
+        # Mixed Precision
+        self.scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
+        self.scheduler = None
 
-def eval_model(model, loader, loss_fn, device):
-    model.eval()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for x,y in loader:
-            x = x.to(device)
-            y = y.to(device)
-            logits = model(x)
-            loss = loss_fn(logits, y)
-            running_loss += float(loss.item()) * x.size(0)
-            preds = logits.argmax(dim=1)
-            correct += (preds == y).sum().item()
-            total += x.size(0)
-    return running_loss/total, correct/total
+    def init_scheduler(self, steps_per_epoch: int, epochs: int):
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            self.optimizer, max_lr=1e-3, steps_per_epoch=steps_per_epoch, epochs=epochs
+        )
 
+    def train_one_epoch(self, dataset) -> Tuple[float, float, float, float]:
+        self.model.train()
+        
+        total_loss = 0.0
+        total_acc = 0.0
+        samples = 0
+        
+        # from collate_fn(batch)
+        for (x_board, x_rating), (y_from, y_to, y_result) in tqdm(dataset, desc='train', leave=False):
+            x_board, x_rating = x_board.to(self.device), x_rating.to(self.device)
+            y_from, y_to, y_result = y_from.to(self.device), y_to.to(self.device), y_result.to(self.device)
+            
+            self.optimizer.zero_grad()
+            
+            with torch.amp.autocast('cuda', enabled=(self.device.type == 'cuda')):
+                pred_from, pred_to, pred_val = self.model(x_board, x_rating)
+                
+                # calc loss
+                l_from = self.loss_ce(pred_from, y_from)
+                l_to = self.loss_ce(pred_to, y_to)
+                l_val = self.loss_mse(pred_val, y_result)
+                
+                # summ loss: From + To + (weight * Value)
+                loss = l_from + l_to + 0.5 * l_val
 
-def load_trained(model_dir: str, device):
-    with open(os.path.join(model_dir, 'move2idx.json'),'r') as f:
-        move2idx = json.load(f)
-    # idx2move = {int(v):k for k,v in enumerate(move2idx)} if False else {int(v):k for k,v in ((v,k) for k,v in move2idx.items())}
-    # В move2idx json: {move:idx}, поэтому build idx2move properly
-    idx2move = {int(idx):move for move,idx in move2idx.items()}
-    num_moves = len(move2idx)
-    model = SmallConvNet(num_moves).to(device)
-    model.load_state_dict(torch.load(os.path.join(model_dir, 'best_model.pth'), map_location=device))
-    model.eval()
-    return model, move2idx, idx2move
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            
+            if self.scheduler:
+                self.scheduler.step()
 
+            bs = x_board.size(0)
+            total_loss += loss.item() * bs
+            
+            # accuracy
+            acc_from = (pred_from.argmax(dim=1) == y_from)
+            acc_to = (pred_to.argmax(dim=1) == y_to)
+            full_acc = (acc_from & acc_to).float().sum().item()
+            
+            total_acc += full_acc
+            samples += bs
+            
+        return total_loss / samples, 0.0, 0.0, total_acc / samples
 
-def predict_move(fen: str, model, move2idx: Dict[str,int], idx2move: Dict[int,str], topk:int=5, legal_only:bool=True, device=None):
-    if device is None:
-        device = next(model.parameters()).device
-    x = mtools.fen_to_tensor(fen)
-    x_t = torch.tensor(x).unsqueeze(0).to(device)
-    with torch.no_grad():
-        logits = model(x_t)
-        probs = torch.softmax(logits, dim=-1).cpu().numpy().reshape(-1)
-    sorted_idx = np.argsort(-probs)
-    # legal filter
-    board = chess.Board(fen)
-    legal_set = set(m.uci() for m in board.legal_moves)
-    results = []
-    for idx in sorted_idx:
-        move = idx2move[idx]
-        p = float(probs[idx])
-        if legal_only:
-            if move in legal_set:
-                results.append((move,p))
-        else:
-            results.append((move,p))
-        if len(results) >= topk:
-            break
-    if len(results) == 0 and legal_only:
-        for idx in sorted_idx[:topk]:
-            results.append((idx2move[idx], float(probs[idx])))
-    return results
+    def eval(self, dataset) -> Tuple[float, float, float, float]:
+        self.model.eval()
+        total_loss = 0.0
+        total_acc = 0.0
+        samples = 0
+        
+        with torch.no_grad():
+            for (x_board, x_rating), (y_from, y_to, y_result) in dataset:
+                x_board, x_rating = x_board.to(self.device), x_rating.to(self.device)
+                y_from, y_to, y_result = y_from.to(self.device), y_to.to(self.device), y_result.to(self.device)
+                
+                pred_from, pred_to, pred_val = self.model(x_board, x_rating)
+                
+                l_from = self.loss_ce(pred_from, y_from)
+                l_to = self.loss_ce(pred_to, y_to)
+                l_val = self.loss_mse(pred_val, y_result)
+                loss = l_from + l_to + 0.5 * l_val
+                
+                bs = x_board.size(0)
+                total_loss += loss.item() * bs
+                
+                acc_from = (pred_from.argmax(dim=1) == y_from)
+                acc_to = (pred_to.argmax(dim=1) == y_to)
+                total_acc += (acc_from & acc_to).float().sum().item()
+                samples += bs
+                
+        return total_loss / samples, 0.0, 0.0, total_acc / samples
+
+    def save(self, out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+        torch.save(self.model.state_dict(), os.path.join(out_dir, 'best_model_coords.pth'))
+
+    def save_jit(self, out_dir, example_x_board: torch.Tensor, example_x_rating: torch.Tensor):
+        self.model.eval()
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+
+            input_board = example_x_board.to(self.device)
+            input_rating = example_x_rating.to(self.device)
+            traced_model = torch.jit.trace(self.model, (input_board, input_rating))
+            
+            os.makedirs(out_dir, exist_ok=True)
+            traced_model.save(os.path.join(out_dir, 'best_model_jit.pt'))
+            # print("Model saved successfully using torch.jit.trace.")
+
+            # scd = torch.jit.script(self.model)
+            # scd.save(os.path.join(out_dir, 'best_model.pt'))
+        except Exception as e:
+            print(f"JIT Tracing failed: {e}")
+
+    def save_onnx(self, out_dir, example_x_board: torch.Tensor, example_x_rating: torch.Tensor):
+        # self.model.eval()
+        # input_tuple = (
+        #     example_x_board.to(self.device).unsqueeze(0),
+        #     example_x_rating.to(self.device).unsqueeze(0)
+        # )
+
+        # input_names = ["board_input", "rating_input"]
+        # output_names = ["policy_from", "policy_to", "value_output"]
+    
+        # torch.onnx.export(
+        #     self.model,
+        #     input_tuple, # input
+        #     os.path.join(out_dir, "best_model.onnx"),
+        #     export_params=True,
+        #     opset_version=14, # version
+        #     do_constant_folding=True,
+        #     input_names=input_names,
+        #     output_names=output_names,
+        #     dynamic_axes=None
+        # )
+        # print(f"Model successfully exported to ONNX: {os.path.join(out_dir, 'best_model.onnx')}")
+        pass
+
+    def predict(self, fen: str, rating: float = 2500.0, topk: int = 5) -> List[Tuple[str, float]]:
+        """
+        Predict legal move by FEN
+        """
+        # 1. Подготовка данных
+        board = chess.Board(fen)
+        x_board = mtools.fen_to_tensor(fen)
+        x_board = torch.tensor(x_board).unsqueeze(0).to(self.device) # (1, 13, 8, 8)
+        
+        x_rating = torch.tensor([[rating / 3500.0]], dtype=torch.float32).to(self.device)
+        
+        self.model.eval()
+        with torch.no_grad():
+            # Получаем логиты (сырые вероятности)
+            logits_from, logits_to, val_pred = self.model(x_board, x_rating)
+            
+            # Softmax для получения вероятностей
+            probs_from = torch.softmax(logits_from, dim=1).squeeze(0).cpu().numpy() # (64,)
+            probs_to = torch.softmax(logits_to, dim=1).squeeze(0).cpu().numpy()     # (64,)
+            
+        # 2. Маскирование нелегальных ходов
+        # Мы не берем просто argmax, мы ищем лучший ЛЕГАЛЬНЫЙ ход.
+        # Вероятность хода P(move) = P(from) * P(to)
+        
+        legal_moves_scores = []
+        for move in board.legal_moves:
+            from_idx = move.from_square
+            to_idx = move.to_square
+            
+            # Считаем "очки" хода как произведение вероятностей
+            score = probs_from[from_idx] * probs_to[to_idx]
+            legal_moves_scores.append((move.uci(), score))
+            
+        # 3. Сортировка и выдача Top-K
+        legal_moves_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        return legal_moves_scores[:topk]
+    
+
+def load(model_dir: str, device: str) -> SmallModelTrainer:
+        model_path = os.path.join(model_dir, 'best_model_coords.pth')
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found")
+        model = SmallConvNet().to(device)
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
+        return SmallModelTrainer(model=model, device=device)

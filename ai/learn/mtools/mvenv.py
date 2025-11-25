@@ -13,12 +13,14 @@ def open_venv(
     is_windows = (os.name == "nt")
 
     import_to_pip: Dict[str, str] = {
-        "pandas": "pandas",
-        "numpy": "numpy",
-        "chess": "python-chess",
-        "torch": "torch",               # special-case: will install torchvision/torchaudio together if user agrees
-        "sklearn": "scikit-learn",      # `from sklearn import ...`
-        "tqdm": "tqdm",
+        "pandas":       "pandas",
+        "numpy":        "numpy",
+        "chess":        "python-chess",
+        "torch":        "torch",        # special-case: will install torchvision/torchaudio together if user agrees
+        "sklearn":      "scikit-learn", # `from sklearn import ...`
+        "tqdm":         "tqdm",
+        # "onnx":         "onnx",
+        # "onnxscript":   "onnxscript",
     }
 
     pip_packages_ordered: List[str] = [
@@ -28,6 +30,8 @@ def open_venv(
         import_to_pip["torch"],
         import_to_pip["sklearn"],
         import_to_pip["tqdm"],
+        # import_to_pip["onnx"],
+        # import_to_pip["onnxscript"],
     ]
 
     if not os.path.exists(venv_path):
@@ -71,12 +75,13 @@ def open_venv(
         return r.returncode == 0
 
     display_map = {
-        "pandas": "pandas",
-        "numpy": "numpy",
-        "chess": "python-chess (import: chess)",
-        "torch": "torch (+ torchvision, torchaudio)",
-        "sklearn": "scikit-learn (import: sklearn)",
-        "tqdm": "tqdm",
+        "pandas":       "pandas",
+        "numpy":        "numpy",
+        "chess":        "python-chess (import: chess)",
+        "torch":        "torch (+ torchvision, torchaudio)",
+        "sklearn":      "scikit-learn (import: sklearn)",
+        "tqdm":         "tqdm",
+        # "onnx":         "onnx (+ onnxscript)",
     }
 
     for pip_name in pip_packages_ordered:
@@ -115,6 +120,8 @@ def open_venv(
 
         if pip_name == "torch":
             install_args = ["install", "torch", "torchvision", "torchaudio", "--index-url", torch_index_url]
+        # elif pip_name == "onnx":
+        #     install_args = ["install", "onnx", "onnxscript"]
         else:
             install_args = ["install", pip_name]
 

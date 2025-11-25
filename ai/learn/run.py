@@ -11,7 +11,10 @@ def sync_exec(py_venv: str, script: str, *args):
 def main():
     parser = argparse.ArgumentParser(description='Train Chess Move Predictor')
     parser.add_argument('command', choices=['training', 'predict'], help='Mod execution')
-    parser.add_argument('--fen', type=str, default='', help='FEN for predict')
+    parser.add_argument('-f', '--fen', type=str, default='', help='FEN for predict')
+    parser.add_argument('-r','--rating', type=int, default=2500, help='Rating value prediction')
+    parser.add_argument('--jit', action='store_true', help='Save JIT model')
+    parser.add_argument('--onnx', action='store_true', help='Save ONNX model')
     parser.add_argument('--csv', type=str, default='', help='Path to CSV dataset')
     parser.add_argument('--venv_learn', type=str, default="mlearn_venv.py", help='Script for training')
     parser.add_argument('--venv_predict', type=str, default="mpredict_venv.py", help='Script for prediction')
@@ -25,7 +28,7 @@ def main():
     parser.add_argument('--test_size', type=float, default=0.05, help='Split dataset')
     parser.add_argument('--no_transformer', action='store_true', help='Disable transformer block')
     parser.add_argument('--alpha_value', type=float, default=0.5, help='Weight for value loss')
-    parser.add_argument('--test_learning', action='store_true', help='Use small model learning and prediction')
+    parser.add_argument('--test_training', action='store_true', help='Use small model learning and prediction')
     parser.add_argument('-y','--yes', action='store_true', help='Automatically answers \"yes\"')
     parser.add_argument('--logfile', type=str, default='mlearn.log', help='Custom logfile')
     args = parser.parse_args()
@@ -56,7 +59,7 @@ def main():
             return
         venv_script = args.venv_learn
         for key, val in vars(args).items():
-            if key in {'logfile', 'venv_learn', 'venv_predict', 'command', 'fen'}:
+            if key in {'logfile', 'venv_learn', 'venv_predict', 'command', 'fen', 'rating'}:
                 continue
             if isinstance(val, bool):
                 if val:
@@ -70,13 +73,15 @@ def main():
             return
         venv_script = args.venv_predict
         for key, val in vars(args).items():
-            if key in {'fen', 'outdir', 'test_learning', 'no_transformer'}:
+            if key in {'fen', 'rating', 'outdir', 'test_training', 'no_transformer'}:
                 if isinstance(val, bool):
                     if val:
                         arg_list.append(f"--{key}")
                 else:
                     arg_list.append(f"--{key}")
                     arg_list.append(str(val))
+    else:
+        print('Command not found')
 
     print(f'Executing {venv_script}...')
     sync_exec(pypath, venv_script, *arg_list)
