@@ -17,23 +17,31 @@ class SmallConvNet(nn.Module):
         super().__init__()
         
         # 1. Feature Extractor (CNN)
-        # можно увеличить для произоводительность kernel_size в первом слое до 5 или 7
+        # можно увеличить для произоводительности kernel_size в первом слое до 5 или 7
         self.conv_block = nn.Sequential(
-            nn.Conv2d(13, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(13, 96, kernel_size=3, padding=1),
+            # nn.Conv2d(13, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(96),
+            # nn.BatchNorm2d(64),
             nn.ReLU(inplace=True), # inplace=True экономит память
             
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.Conv2d(96, 128, kernel_size=3, padding=1),
+            # nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(128, 192, kernel_size=3, padding=1),
+            # nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(192),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             
             # можно попробовать эти три слоя исключить
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
+            # если менять в этом слое веса, то нужно менять и в fc_common входящие веса
+            nn.Conv2d(192, 192, kernel_size=3, padding=1),
+            # nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(192),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True)
         )
         
@@ -44,7 +52,8 @@ class SmallConvNet(nn.Module):
         # 2. Common Dense Layer
         # на вход 128 каналов от CNN + 1 число рейтинга
         self.fc_common = nn.Sequential(
-            nn.Linear(128 + 1, 512),
+            nn.Linear(192 + 1, 512),
+            # nn.Linear(128 + 1, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3)
         )

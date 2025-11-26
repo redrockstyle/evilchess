@@ -20,10 +20,10 @@ def fen_to_tensor(fen: str) -> np.ndarray:
     Convert FEN to numpy array (13, 8, 8).
     Planes 0-5: White pieces
     Planes 6-11: Black pieces
-    Plane 12: Side to move (All 1.0 if White, All 0.0 if Black)
+    Plane 12: Side to move (All 1 if White, All 0 if Black)
     """
     board = chess.Board(fen)
-    planes = np.zeros((13,8,8), dtype=np.float32)
+    planes = np.zeros((13,8,8), dtype=np.int8)
     # pieces
     for square in chess.SQUARES:
         piece = board.piece_at(square)
@@ -33,11 +33,11 @@ def fen_to_tensor(fen: str) -> np.ndarray:
             # чтобы визуально было как на доске (сверху вниз), делаем 7 - rank.
             row = 7 - chess.square_rank(square)
             col = chess.square_file(square)
-            planes[plane_idx, row, col] = 1.0
+            planes[plane_idx, row, col] = 1
 
     # side to move plane
     if board.turn == chess.WHITE:
-        planes[12, :, :] = 1.0
+        planes[12, :, :] = 1
     return planes
 
 
