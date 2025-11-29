@@ -13,6 +13,7 @@ def main():
     parser.add_argument('command', choices=['training', 'predict'], help='Mod execution')
     parser.add_argument('-f', '--fen', type=str, default='', help='FEN for predict')
     parser.add_argument('-r','--rating', type=int, default=2500, help='Rating value prediction')
+    parser.add_argument('--device', type=str, default='cuda', help='Device')
     parser.add_argument('--jit', action='store_true', help='Save JIT model')
     parser.add_argument('--onnx', action='store_true', help='Save ONNX model')
     parser.add_argument('--csv', type=str, default='', help='Path to CSV dataset')
@@ -29,9 +30,8 @@ def main():
     parser.add_argument('--patience', type=int, default=5, help='Overfitting limit')
     parser.add_argument('--max_samples', type=int, default=0)
     parser.add_argument('--test_size', type=float, default=0.05, help='Split dataset')
-    parser.add_argument('--no_transformer', action='store_true', help='Disable transformer block')
+    parser.add_argument('--use_transformer', action='store_true', help='Use transformer block')
     parser.add_argument('--alpha_value', type=float, default=0.5, help='Weight for value loss')
-    parser.add_argument('--test_training', action='store_true', help='Use small model learning and prediction')
     parser.add_argument('-y','--yes', action='store_true', help='Automatically answers \"yes\"')
     parser.add_argument('--logfile', type=str, default='mlearn.log', help='Custom logfile')
     args = parser.parse_args()
@@ -76,7 +76,7 @@ def main():
             return
         venv_script = args.venv_predict
         for key, val in vars(args).items():
-            if key in {'fen', 'rating', 'outdir', 'test_training', 'no_transformer'}:
+            if key in {'fen', 'rating', 'outdir', 'use_transformer', 'jit', 'onnx', 'device'}:
                 if isinstance(val, bool):
                     if val:
                         arg_list.append(f"--{key}")

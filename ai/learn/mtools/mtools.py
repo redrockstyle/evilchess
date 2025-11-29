@@ -72,7 +72,7 @@ def save_model_pt(model, move2idx, out_dir):
 
 def input_tensor(fen: str, rating: int) -> Tuple[torch.Tensor, torch.Tensor]:
     # board: (13, 8, 8) -> (1, 13, 8, 8)
-    x_board = torch.tensor(fen_to_tensor(fen)).unsqueeze(0)
+    x_board = torch.tensor(fen_to_tensor(fen), dtype=torch.float32).unsqueeze(0)
     # rating: (1, 1)
     x_rating = torch.tensor([[rating / 3500.0]], dtype=torch.float32)
     return x_board, x_rating
