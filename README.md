@@ -38,7 +38,7 @@ I implemented a small [internal chess](#internal-engine-overview) engine that pe
   <img src="materials/img/training_history.png" alt="train" width="600">
 </p>
 
-Unfortunately the model was not integrated into the app, but you can download and test it locally from the [repository directory](/ai/learn/).
+Unfortunately the model was not integrated into the app, but you can download and test it locally from the [repository directory](/ai/learn/). The model I trained can be found in the [repository directory](/ai/learn/chess_model_train10h/).
 
 ### Comparative tests
 I ran several head-to-head and task-based comparisons between the internal engine and the neural model:
