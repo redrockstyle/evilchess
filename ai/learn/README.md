@@ -4,6 +4,14 @@ The main script, named [run.py](/ai/learn/run.py), sets up the required venv env
 
 Use `run.py --help` for more details.
 
+
+Quick start of my model:
+
+```
+    python3 run.py predict --fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" --rating=3500 -y --outdir="chess_model_train10h" --play
+```
+
+
 Example:
 ```
     python3 run.py predict --fen="6k1/5pp1/8/4p1Pp/b4q1P/2p2P2/2R5/3K1B2 b - - 5 47" --rating=3500 -y --outdir="chess_model_train10h"
