@@ -45,6 +45,7 @@ evilchess.json
 *.db
 *.db-shm
 *.db-wal
+*.npy
 
 ### Python template
 # Byte-compiled / optimized / DLL files
@@ -70,6 +71,9 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# AI
+!chess_model.log
 
 # Other
 ui/gui/guitest/

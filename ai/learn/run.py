@@ -13,6 +13,7 @@ def main():
     parser.add_argument('command', choices=['training', 'predict'], help='Mod execution')
     parser.add_argument('-f', '--fen', type=str, default='', help='FEN for predict')
     parser.add_argument('-r','--rating', type=int, default=2500, help='Rating value prediction')
+    parser.add_argument('--play', action='store_true', help='While SAN move')
     parser.add_argument('--device', type=str, default='cuda', help='Device')
     parser.add_argument('--jit', action='store_true', help='Save JIT model')
     parser.add_argument('--onnx', action='store_true', help='Save ONNX model')
@@ -76,7 +77,7 @@ def main():
             return
         venv_script = args.venv_predict
         for key, val in vars(args).items():
-            if key in {'fen', 'rating', 'outdir', 'use_transformer', 'jit', 'onnx', 'device'}:
+            if key in {'fen', 'rating', 'outdir', 'use_transformer', 'jit', 'onnx', 'device', 'play'}:
                 if isinstance(val, bool):
                     if val:
                         arg_list.append(f"--{key}")

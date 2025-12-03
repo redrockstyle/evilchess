@@ -250,7 +250,7 @@ class ModelTrainer:
             self.scaler = torch.amp.GradScaler('cuda', enabled=(self.device.type == 'cuda'))
             self.scheduler = None
         else:
-            model_path = os.path.join(model_dir, 'best_model_coords.pth')
+            model_path = os.path.join(model_dir, 'chess_model_coords.pth')
             if not os.path.exists(model_path):
                 raise FileNotFoundError(f"Model not found")
             self.model = ChessModel(use_transformer=use_transformer).to(device)
@@ -337,48 +337,55 @@ class ModelTrainer:
 
     def save(self, out_dir):
         os.makedirs(out_dir, exist_ok=True)
-        torch.save(self.model.state_dict(), os.path.join(out_dir, 'best_model_coords.pth'))
+        torch.save(self.model.state_dict(), os.path.join(out_dir, 'chess_model_coords.pth'))
 
-    def save_jit(self, out_dir, example_x_board: torch.Tensor, example_x_rating: torch.Tensor):
+    def save_jit(self, out_dir):
         self.model.eval()
         try:
             os.makedirs(out_dir, exist_ok=True)
 
-            input_board = example_x_board.to(self.device)
-            input_rating = example_x_rating.to(self.device)
-            traced_model = torch.jit.trace(self.model, (input_board, input_rating))
+            dummy_x_board = torch.randn(1, 13, 8, 8, dtype=torch.float32).to(self.device)
+            dummy_x_rating = torch.tensor([[2000.0 / 3500.0]], dtype=torch.float32).to(self.device)
+            traced_model = torch.jit.trace(self.model, (dummy_x_board, dummy_x_rating))
             
             os.makedirs(out_dir, exist_ok=True)
-            traced_model.save(os.path.join(out_dir, 'best_model_jit.pt'))
-            # print("Model saved successfully using torch.jit.trace.")
-
-            # scd = torch.jit.script(self.model)
-            # scd.save(os.path.join(out_dir, 'best_model.pt'))
+            traced_model.save(os.path.join(out_dir, 'chess_model_jit.pt'))
+            print("Model saved successfully using torch.jit.trace.")
         except Exception as e:
             print(f"JIT Tracing failed: {e}")
 
-    def save_onnx(self, out_dir, example_x_board: torch.Tensor, example_x_rating: torch.Tensor):
+    def save_onnx(self, out_dir):
         # self.model.eval()
-        # input_tuple = (
-        #     example_x_board.to(self.device).unsqueeze(0),
-        #     example_x_rating.to(self.device).unsqueeze(0)
-        # )
+
+        # dummy_x_board = torch.randn(1, 13, 8, 8, dtype=torch.float32).to(self.device)
+        # dummy_x_rating = torch.tensor([[2000.0 / 3500.0]], dtype=torch.float32).to(self.device)
+
+        # os.makedirs(out_dir, exist_ok=True)
+        # onnx_output_path = os.path.join(out_dir, "chess_model_onnx.onnx")
 
         # input_names = ["board_input", "rating_input"]
         # output_names = ["policy_from", "policy_to", "value_output"]
+
+        # dynamic_axes = {
+        #     "board_input": {0: "batch_size"},
+        #     "rating_input": {0: "batch_size"},
+        #     "policy_from": {0: "batch_size"},
+        #     "policy_to": {0: "batch_size"},
+        #     "value_output": {0: "batch_size"},
+        # }
     
         # torch.onnx.export(
         #     self.model,
-        #     input_tuple, # input
-        #     os.path.join(out_dir, "best_model.onnx"),
+        #     (dummy_x_board, dummy_x_rating),
+        #     onnx_output_path,
         #     export_params=True,
-        #     opset_version=14, # version
+        #     opset_version=18, # 14??
         #     do_constant_folding=True,
         #     input_names=input_names,
-        #     output_names=output_names,
-        #     dynamic_axes=None
+        #     output_names=output_names
+        #     # dynamic_axes=dynamic_axes
         # )
-        # print(f"Model successfully exported to ONNX: {os.path.join(out_dir, 'best_model.onnx')}")
+        # print(f"Model successfully exported to ONNX: {os.path.join(out_dir, 'chess_model_onnx.onnx')}")
         pass
 
     def predict(self, fen: str, rating: float = 2500.0, topk: int = 5) -> List[Tuple[str, float]]:

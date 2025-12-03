@@ -1,0 +1,54 @@
+[Event "Сhess AI Tournament"]
+[Site "https://github.com/redrockstyle/evilchess"]
+[Date "2025.11.30"]
+[Round "1"]
+[White "Chess AI Model"]
+[Black "Internal Engine"]
+[Result "1-0"]
+
+1. e4 a6 2. d4 a5 3. Nc3 b6 4. Nf3 Na6 5. Bc4 Bb7 6. O-O Nb8 7. Re1 Ra7 8. Bxf7+ Kxf7 9. Ng5+ Ke8 10. d5 Ba6 11. e5 Bb7 12. Qh5+ g6 13. Qh3 Na6 14. e6 dxe6 15. Nxe6 Qxd5 16. Nxd5 Bxd5 17. Nxf8 Kxf8 18. Bh6+ Nxh6 19. Qxh6+ Kg8 20. Rxe7 Bf7 21. Rae1 a4 22. Re8+ Bxe8 23. Rxe8+ Kf7 24. Rxh8 Rb7 25. Qxh7+ Kf6 26. Rf8+ Ke5 27. Qe7+ Kd5 28. Rd8+ Kc4 29. Qe4+ Kb5 30. Qxb7 Nb4 31. Qa8 a3 32. Qxa3 g5 33. Qc3 Na6 34. Qb3+ Ka5 35. Rd5+ Nc5 36. Qc3+ Kb5 37. Qxc5+ bxc5 38. Rxg5 Kc4 39. Rg4+ Kb5 40. h4 Ka5 41. h5 Kb5 42. h6 Ka5 43. h7 Kb5 44. h8=Q Kb6 45. Qc3 Kb5 46. Rc4 Kb6 47. Rxc5 Kb7 48. Rxc7+ Ka6 49. Rc6+ Kb5 50. Rc5+ Ka6 51. Ra5+ Kb6 52. Qb4+ Kc6 53. Rc5+ Kd6 54. Qb6+ Kd7 55. Rc7+ Kd8 56. Qb8# 1-0
+
+
+[Event "Сhess AI Tournament"]
+[Site "https://github.com/redrockstyle/evilchess"]
+[Date "2025.11.30"]
+[Round "2"]
+[White "Internal Engine"]
+[Black "Chess AI Model"]
+[Result "1-0"]
+
+1. b3 Nf6 2. Nc3 g6 3. Bb2 Bg7 4. f3 O-O 5. Nb1 d5 6. Nc3 d4 7. Rb1 dxc3 8. Bxc3 c5 9. Rb2 Nc6 10. Qb1 e5 11. Qd1 e4 12. Qb1 exf3 13. Nxf3 Ne8 14. Qc1 Bxc3 15. dxc3 Ng7 16. Qh6 Bf5 17. Ng5 Qf6 18. Qxh7# 1-0
+
+
+[Event "Сhess AI Tournament"]
+[Site "https://github.com/redrockstyle/evilchess"]
+[Date "2025.11.30"]
+[Round "3"]
+[White "Internal Engine"]
+[Black "Chess AI Model"]
+[Result "0-1"]
+
+1. b3 d5 2. Na3 Nf6 3. Bb2 g6 4. Rb1 Bg7 5. e3 O-O 6. Qf3 c5 7. Bb5 Nc6 8. Rc1 Bg4 9. Qf4 a6 10. Bxf6 Bxf6 11. Qxg4 axb5 12. Nb1 Rxa2 13. Nc3 Ra5 14. Nce2 d4 15. Qf3 d3 16. Kd1 dxe2+ 17. Kxe2 c4 18. Rd1 Ra2 19. bxc4 bxc4 20. Rc1 c3 21. dxc3 Bxc3 22. Kf1 Qd2 23. Rd1 Qxc2 24. Qe2 Qxe2+ 25. Nxe2 Bf6 26. Re1 Rd8 27. Rg1 Rdd2 28. Rb1 Rxe2 29. Rb3 Rxf2+ 30. Ke1 Rfe2+ 31. Kf1 Reb2 32. Rxb2 Rxb2 33. g4 Bg5 34. Rg2 Rxg2 35. Kxg2 Bxe3 36. Kf3 Bg5 37. Ke4 e6 38. h3 Be7 39. Kd3 f5 40. gxf5 exf5 41. Ke2 Kf7 42. Ke1 Bf6 43. Kf1 b5 44. Ke1 b4 45. Kd1 b3 46. Kd2 b2 47. Ke1 b1=Q+ 48. Kd2 Qb3 49. Ke1 Qc2 50. Kf1 Nd4 51. Kg1 Nf3+ 52. Kf1 Qd2 53. h4 Ne1 54. Kg1 Qg2# 0-1
+
+
+[Event "Сhess AI Tournament"]
+[Site "https://github.com/redrockstyle/evilchess"]
+[Date "2025.11.30"]
+[Round "4"]
+[White "Chess AI Model"]
+[Black "Internal Engine"]
+[Result "1-0"]
+
+1. d4 Na6 2. Nf3 Nb8 3. c4 a6 4. Nc3 b6 5. e4 e5 6. Nxe5 b5 7. cxb5 a5 8. Nc4 d6 9. Bd3 c6 10. bxc6 Qc7 11. d5 a4 12. O-O Be7 13. Nxa4 h5 14. Nab6 Ra7 15. Bf4 h4 16. h3 Qd8 17. Nxc8 Qxc8 18. Nxd6+ Bxd6 19. Bxd6 Rh6 20. Be5 Nxc6 21. dxc6 Qxc6 22. Rc1 Qd7 23. Qe2 Rxa2 24. Bb5 Rh7 25. Bxd7+ Ke7 26. Rc8 Kxd7 27. Rc7+ Ke6 28. Qc4+ Kxe5 29. Qxf7 Ra5 30. Qxg8 Kd6 31. Qxh7 Kxc7 32. Qxg7+ Kb6 33. Qh6+ Kb5 34. Qxh4 Ra6 35. Qg5+ Kb4 36. Qe5 Ra5 37. Qxa5+ Kxa5 38. e5 Ka6 39. e6 Ka5 40. e7 Ka4 41. e8=Q+ Kb3 42. Qe3+ Kc4 43. Rc1+ Kd5 44. Rc5+ Kd6 45. Qd4+ Ke6 46. Re5+ Kf6 47. Qd6+ Kf7 48. Re7+ Kf8 49. Qd8# 1-0
+
+
+[Event "Сhess AI Tournament"]
+[Site "https://github.com/redrockstyle/evilchess"]
+[Date "2025.11.30"]
+[Round "5"]
+[White "Chess AI Model"]
+[Black "Internal Engine"]
+[Result "1-0"]
+
+1. Nf3 a6 2. g3 c6 3. Bg2 a5 4. O-O Ra7 5. d4 a4 6. c4 Ra8 7. Nc3 Qb6 8. Nxa4 Qb4 9. b3 Rxa4 10. Bd2 Qa3 11. bxa4 Qd6 12. c5 Qd5 13. Qb3 Qf5 14. e4 Qxf3 15. Bxf3 d6 16. cxd6 exd6 17. Ba5 Nf6 18. e5 dxe5 19. dxe5 Nd5 20. Bxd5 cxd5 21. Qxd5 Be7 22. Rac1 Bd6 23. Qxd6 Nc6 24. Rxc6 Bd7 25. Rc7 b5 26. Qxd7+ Kf8 27. Qc8# 1-0
+
